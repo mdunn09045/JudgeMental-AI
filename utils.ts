@@ -159,32 +159,64 @@ export interface ProjectScoreStats {
   totalScore: number;
 }
 
-export const calculateLeaderboard = (projects: Project[], scores: Score[], criteria: Criterion[]): ProjectScoreStats[] => {
-  return projects
-    .filter(p => !p.noShow) // Exclude No Shows
-    .map(p => {
-      const projectScores = scores.filter(s => s.projectId === p.id);
-      if (projectScores.length === 0) {
-        return { projectId: p.id, projectName: p.name, table: p.table, timesJudged: 0, avgScore: 0, totalScore: 0 };
+export const calculateLeaderboard = (
+  projects: Project[], 
+  scores: Score[], 
+  criteria: Criterion[],
+  organizerCategories: string[] = [],
+  filterCategory: string | null = null
+): ProjectScoreStats[] => {
+  
+  // 1. Identify which criteria IDs to include in the calculation
+  const includedCriteriaIds = new Set<string>();
+  
+  criteria.forEach(c => {
+    const isCategoryCriterion = organizerCategories.includes(c.name);
+    
+    if (!filterCategory) {
+      // OVERALL VIEW: Exclude all category-specific criteria
+      // This ensures overall ranking is based purely on general criteria
+      if (!isCategoryCriterion) {
+        includedCriteriaIds.add(c.id);
       }
+    } else {
+      // CATEGORY VIEW: Include General Criteria AND the specific category criterion
+      // Exclude other category criteria that are irrelevant to this view
+      if (!isCategoryCriterion || c.name === filterCategory) {
+        includedCriteriaIds.add(c.id);
+      }
+    }
+  });
 
-      let totalPoints = 0;
-      projectScores.forEach(s => {
-        // Sum all criteria for this score entry
-        const scoreSum = Object.values(s.criteria).reduce((a, b) => a + b, 0);
-        totalPoints += scoreSum;
+  // 2. Filter projects based on view
+  let relevantProjects = projects.filter(p => !p.noShow);
+  if (filterCategory) {
+    relevantProjects = relevantProjects.filter(p => p.categories.includes(filterCategory));
+  }
+
+  return relevantProjects.map(p => {
+    const projectScores = scores.filter(s => s.projectId === p.id);
+    if (projectScores.length === 0) {
+      return { projectId: p.id, projectName: p.name, table: p.table, timesJudged: 0, avgScore: 0, totalScore: 0 };
+    }
+
+    let totalPoints = 0;
+    projectScores.forEach(s => {
+      // Sum only the allowed criteria
+      Object.entries(s.criteria).forEach(([cId, scoreVal]) => {
+        if (includedCriteriaIds.has(cId)) {
+          totalPoints += scoreVal;
+        }
       });
-      
-      // Normalize? For now just raw average across all criteria entries
-      // Total max possible score per judge = criteria.length * 3
-      
-      return {
-        projectId: p.id,
-        projectName: p.name,
-        table: p.table,
-        timesJudged: projectScores.length,
-        totalScore: totalPoints,
-        avgScore: totalPoints / projectScores.length
-      };
-    }).sort((a, b) => b.avgScore - a.avgScore);
+    });
+    
+    return {
+      projectId: p.id,
+      projectName: p.name,
+      table: p.table,
+      timesJudged: projectScores.length,
+      totalScore: totalPoints,
+      avgScore: totalPoints / projectScores.length
+    };
+  }).sort((a, b) => b.avgScore - a.avgScore);
 };

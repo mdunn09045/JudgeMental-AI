@@ -31,7 +31,7 @@ export interface Project {
   id: string;
   name: string;
   table: string;
-  category: string; // Main category or track
+  categories: string[]; // List of tracks or prizes
   description?: string;
   noShow?: boolean;
 }
@@ -103,8 +103,13 @@ export const DEFAULT_CRITERIA: Criterion[] = [
   { id: '3', name: 'Learning', description: 'Did the team stretch themselves? Did they try to learn something new?', scale: '1-3' },
   { id: '4', name: 'Design', description: 'Did the team put thought into the user experience? UI design?', scale: '1-3' },
   { id: '5', name: 'Technology', description: 'How technically impressive was the hack? Complexity?', scale: '1-3' },
-  { id: '6', name: 'Organizer Category Relevance', description: 'Relevance to the specific category opted into.', scale: '1-3' },
 ];
+
+const DEFAULT_JUDGES: Judge[] = Array.from({ length: 15 }, (_, i) => ({
+  id: `default-judge-${i + 1}`,
+  name: `Judge ${i + 1}`,
+  phone: '1234567890',
+}));
 
 export const INITIAL_DATA: HackathonData = {
   eventName: "",
@@ -120,7 +125,7 @@ export const INITIAL_DATA: HackathonData = {
   venueHardCutoff: "",
   tableCount: 0,
   judgesPerProject: 3,
-  judges: [],
+  judges: DEFAULT_JUDGES,
   organizers: [],
   sponsorCategories: [],
   organizerCategories: [],

@@ -8,21 +8,25 @@ interface Props {
 }
 
 export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
-  const [newProject, setNewProject] = useState<Partial<Project>>({ category: 'General' });
+  // We use a temporary string for category input in manual entry
+  const [newProject, setNewProject] = useState<{name: string, table: string, categoriesStr: string, description: string}>({ 
+    name: '', table: '', categoriesStr: 'General', description: '' 
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addProject = () => {
     if (newProject.name && newProject.table) {
+      const categories = newProject.categoriesStr.split(',').map(c => c.trim()).filter(c => c.length > 0);
       const p: Project = {
         id: Date.now().toString(),
         name: newProject.name,
         table: newProject.table,
-        category: newProject.category || 'General',
+        categories: categories.length > 0 ? categories : ['General'],
         description: newProject.description,
         noShow: false
       };
       onChange({ ...data, projects: [...data.projects, p] });
-      setNewProject({ name: '', table: '', category: 'General', description: '' });
+      setNewProject({ name: '', table: '', categoriesStr: 'General', description: '' });
     }
   };
 
@@ -150,35 +154,30 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
 
             const description = descIdx !== -1 && row[descIdx] ? row[descIdx] : '';
             
-            // Handle Categories / Opt-In Prizes
+            // Handle Categories / Opt-In Prizes as Tags
             let categories: string[] = ['General'];
             if (catIdx !== -1 && row[catIdx]) {
                 const catRaw = row[catIdx];
                 // Split by comma. Devpost uses comma separated list for prizes.
-                // Note: The parseCSV function already handled the CSV field splitting. 
-                // So catRaw is the inner content of the cell.
                 const split = catRaw.split(',').map(s => s.trim()).filter(s => s);
                 if (split.length > 0) {
                     categories = split;
                 }
             }
 
-            // Create a Project entry for EACH category/prize
-            categories.forEach((cat, idx) => {
-                newProjects.push({
-                    id: `import-${Date.now()}-${i}-${idx}`,
-                    name: name,
-                    table: table,
-                    category: cat,
-                    description: description.substring(0, 200) + (description.length > 200 ? '...' : ''), // Truncate description for UI perf
-                    noShow: false
-                });
+            newProjects.push({
+                id: `import-${Date.now()}-${i}`,
+                name: name,
+                table: table,
+                categories: categories,
+                description: description.substring(0, 200) + (description.length > 200 ? '...' : ''), // Truncate description for UI perf
+                noShow: false
             });
         }
 
         if (newProjects.length > 0) {
             onChange({ ...data, projects: [...data.projects, ...newProjects] });
-            alert(`Successfully imported ${newProjects.length} entries (including split categories).`);
+            alert(`Successfully imported ${newProjects.length} projects.`);
         } else {
             alert("No valid projects found in CSV.");
         }
@@ -194,15 +193,24 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
   };
 
   const generateDemoProjects = () => {
-    const categories = ['General', 'FinTech', 'Health', 'Sustainability', 'Education'];
-    const demoProjects: Project[] = Array.from({ length: 15 }).map((_, i) => ({
-      id: `demo-${i}`,
-      name: `Project ${['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'][i%5]} ${i+1}`,
-      table: `${i + 1}`,
-      category: categories[i % categories.length],
-      description: 'A revolutionary app that solves big problems.',
-      noShow: false
-    }));
+    const categoriesList = ['FinTech', 'Health', 'Sustainability', 'Education', 'Gaming', 'Mobile', 'Web3'];
+    const demoProjects: Project[] = Array.from({ length: 15 }).map((_, i) => {
+        // Assign random categories
+        const numCats = Math.floor(Math.random() * 3) + 1; // 1 to 3 categories
+        const cats = [];
+        for(let j=0; j<numCats; j++) {
+            cats.push(categoriesList[(i + j) % categoriesList.length]);
+        }
+        
+        return {
+            id: `demo-${i}`,
+            name: `Project ${['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'][i%5]} ${i+1}`,
+            table: `${i + 1}`,
+            categories: cats,
+            description: 'A revolutionary app that solves big problems.',
+            noShow: false
+        };
+    });
     onChange({ ...data, projects: [...data.projects, ...demoProjects] });
   };
 
@@ -245,8 +253,8 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
             <div>
                 <p className="font-semibold mb-1">CSV Import Guide:</p>
                 <ul className="list-disc list-inside space-y-1 ml-1 text-xs sm:text-sm">
-                    <li><strong>Devpost Export:</strong> Supports "Project Title" and "Opt-In Prizes" (splits prizes into separate entries). Auto-assigns tables if missing.</li>
-                    <li><strong>Custom CSV:</strong> Required header "Name". Optional: "Table", "Category", "Description".</li>
+                    <li><strong>Devpost Export:</strong> Supports "Project Title" and "Opt-In Prizes" (imported as tags). Auto-assigns tables if missing.</li>
+                    <li><strong>Custom CSV:</strong> Required header "Name". Optional: "Table", "Category" (comma separated), "Description".</li>
                 </ul>
             </div>
         </div>
@@ -267,10 +275,10 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
               onChange={e => setNewProject({...newProject, table: e.target.value})}
             />
              <input 
-              placeholder="Category" 
-              className="border p-2 rounded w-full md:w-32"
-              value={newProject.category || ''}
-              onChange={e => setNewProject({...newProject, category: e.target.value})}
+              placeholder="Categories (comma separated)" 
+              className="border p-2 rounded w-full md:w-64"
+              value={newProject.categoriesStr || ''}
+              onChange={e => setNewProject({...newProject, categoriesStr: e.target.value})}
             />
             <button onClick={addProject} className="bg-indigo-600 text-white p-2 rounded flex items-center justify-center min-w-[3rem]">
               <Plus size={20} />
@@ -285,7 +293,7 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
                 <th className="px-4 py-3">No Show</th>
                 <th className="px-4 py-3">Table</th>
                 <th className="px-4 py-3">Project Name</th>
-                <th className="px-4 py-3">Category (Editable)</th>
+                <th className="px-4 py-3">Categories (Comma Sep)</th>
                 <th className="px-4 py-3 text-right">Action</th>
               </tr>
             </thead>
@@ -310,10 +318,20 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
                       <td className="px-4 py-3">
                          <input 
                             type="text" 
-                            value={p.category}
-                            onChange={(e) => updateProjectField(p.id, 'category', e.target.value)}
+                            value={p.categories.join(', ')}
+                            onChange={(e) => {
+                                const cats = e.target.value.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                                updateProjectField(p.id, 'categories', cats);
+                            }}
                             className={`border-b bg-transparent focus:border-indigo-500 outline-none w-full ${p.noShow ? 'text-gray-400' : 'text-gray-700'}`}
                          />
+                         <div className="flex flex-wrap gap-1 mt-1">
+                             {p.categories.map((c, i) => (
+                                 <span key={i} className="inline-block px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">
+                                     {c}
+                                 </span>
+                             ))}
+                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button onClick={() => removeProject(p.id)} className="text-red-500 hover:text-red-700">

@@ -10,7 +10,7 @@ import { JudgePortal } from './components/JudgePortal';
 import { LiveDashboard } from './components/LiveDashboard';
 import { Calendar, ClipboardList, Activity, LayoutDashboard, Menu, X, Users, Database, BarChart } from 'lucide-react';
 
-const STORAGE_KEY = 'judgeplan_pro_data_v1';
+const STORAGE_KEY = 'judgeplan_pro_data_v2';
 
 enum View {
   PLANNING = 'PLANNING',

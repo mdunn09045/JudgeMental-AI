@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { HackathonData, Organizer, OrganizerRoleType, Judge, DEFAULT_CRITERIA, Criterion } from '../types';
-import { Plus, Trash2, HelpCircle, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, HelpCircle, AlertTriangle, Edit2, X, Save } from 'lucide-react';
 
 interface Props {
   data: HackathonData;
@@ -19,7 +19,9 @@ const Tooltip = ({ text }: { text: string }) => (
 
 export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => {
   const [newJudge, setNewJudge] = useState<Partial<Judge>>({});
+  const [editingJudgeId, setEditingJudgeId] = useState<string | null>(null);
   const [newOrg, setNewOrg] = useState<Partial<Organizer>>({ role: OrganizerRoleType.DEVPOST });
+  const [newOrgCat, setNewOrgCat] = useState('');
 
   const updateField = (field: keyof HackathonData, value: any) => {
     onChange({ ...data, [field]: value });
@@ -27,12 +29,28 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
 
   const addJudge = () => {
     if (newJudge.name && newJudge.phone) {
-      updateField('judges', [...data.judges, { ...newJudge, id: Date.now().toString() } as Judge]);
+      if (editingJudgeId) {
+        updateField('judges', data.judges.map(j => j.id === editingJudgeId ? { ...newJudge, id: editingJudgeId } as Judge : j));
+        setEditingJudgeId(null);
+      } else {
+        updateField('judges', [...data.judges, { ...newJudge, id: Date.now().toString() } as Judge]);
+      }
       setNewJudge({ name: '', phone: '', email: '' });
     }
   };
 
+  const startEditJudge = (judge: Judge) => {
+    setNewJudge(judge);
+    setEditingJudgeId(judge.id);
+  };
+
+  const cancelEditJudge = () => {
+    setNewJudge({ name: '', phone: '', email: '' });
+    setEditingJudgeId(null);
+  };
+
   const removeJudge = (id: string) => {
+    if (editingJudgeId === id) cancelEditJudge();
     updateField('judges', data.judges.filter(j => j.id !== id));
   };
 
@@ -58,6 +76,46 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
   
   const removeCriteria = (id: string) => {
     updateField('criteria', data.criteria.filter(c => c.id !== id));
+  };
+
+  // Organizer Categories Helpers
+  const addOrgCategory = () => {
+    const catName = newOrgCat.trim();
+    if (!catName || data.organizerCategories.includes(catName)) return;
+
+    // 1. Add to categories list
+    const updatedCats = [...data.organizerCategories, catName];
+    
+    // 2. Automatically generate a criterion for it
+    const newCriterion: Criterion = {
+        id: `gen-${Date.now()}`,
+        name: catName,
+        description: `Relevance/Quality specifically for the ${catName} track.`,
+        scale: '1-3'
+    };
+    const updatedCriteria = [...data.criteria, newCriterion];
+
+    onChange({
+        ...data,
+        organizerCategories: updatedCats,
+        criteria: updatedCriteria
+    });
+    setNewOrgCat('');
+  };
+
+  const removeOrgCategory = (catName: string) => {
+    // 1. Remove from categories list
+    const updatedCats = data.organizerCategories.filter(c => c !== catName);
+    
+    // 2. Remove the generated criterion (by name matching)
+    // We only remove it if it looks like the one we generated (matches name)
+    const updatedCriteria = data.criteria.filter(c => c.name !== catName);
+
+    onChange({
+        ...data,
+        organizerCategories: updatedCats,
+        criteria: updatedCriteria
+    });
   };
 
   return (
@@ -186,16 +244,34 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
             value={newJudge.email || ''}
             onChange={e => setNewJudge({...newJudge, email: e.target.value})}
           />
-          <button onClick={addJudge} className="bg-indigo-600 text-white p-2 rounded flex items-center justify-center">
-            <Plus size={20} />
-          </button>
+          {editingJudgeId ? (
+            <>
+              <button onClick={addJudge} className="bg-green-600 text-white p-2 rounded flex items-center justify-center">
+                <Save size={20} />
+              </button>
+              <button onClick={cancelEditJudge} className="bg-gray-400 text-white p-2 rounded flex items-center justify-center">
+                <X size={20} />
+              </button>
+            </>
+          ) : (
+            <button onClick={addJudge} className="bg-indigo-600 text-white p-2 rounded flex items-center justify-center">
+              <Plus size={20} />
+            </button>
+          )}
         </div>
 
         <ul className="space-y-2 max-h-60 overflow-y-auto">
           {data.judges.map(judge => (
-            <li key={judge.id} className="flex justify-between items-center bg-gray-50 p-2 rounded text-sm">
+            <li key={judge.id} className={`flex justify-between items-center bg-gray-50 p-2 rounded text-sm ${editingJudgeId === judge.id ? 'border border-indigo-500 bg-indigo-50' : ''}`}>
               <span>{judge.name} - {judge.phone}</span>
-              <button onClick={() => removeJudge(judge.id)} className="text-red-500"><Trash2 size={16}/></button>
+              <div className="flex gap-2">
+                <button onClick={() => startEditJudge(judge)} className="text-blue-500 hover:text-blue-700">
+                    <Edit2 size={16}/>
+                </button>
+                <button onClick={() => removeJudge(judge.id)} className="text-red-500 hover:text-red-700">
+                    <Trash2 size={16}/>
+                </button>
+              </div>
             </li>
           ))}
         </ul>
@@ -258,18 +334,41 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
             />
         </div>
 
-        <div className="mb-6">
-            <label className="block text-sm font-medium mb-1">Organizer Categories (comma separated)</label>
-            <input 
-              type="text" 
-              className="w-full p-2 border rounded" 
-              placeholder="e.g. Best Beginner, Sustainability"
-              value={data.organizerCategories.join(', ')} 
-              onChange={e => updateField('organizerCategories', e.target.value.split(',').map(s => s.trim()))}
-            />
+        <div className="mb-6 bg-indigo-50 p-4 rounded border border-indigo-100">
+            <label className="block text-sm font-bold text-indigo-800 mb-1">Organizer Categories</label>
+            <p className="text-xs text-indigo-600 mb-2">Adding a category here will automatically generate a judging criterion for it.</p>
+            
+            <div className="flex gap-2 mb-3">
+              <input 
+                type="text" 
+                className="w-full p-2 border rounded text-sm" 
+                placeholder="e.g. Best Sustainability, Best Beginner"
+                value={newOrgCat} 
+                onChange={e => setNewOrgCat(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addOrgCategory()}
+              />
+              <button onClick={addOrgCategory} className="bg-indigo-600 text-white p-2 rounded flex items-center">
+                <Plus size={18} />
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {data.organizerCategories.map((cat, i) => (
+                <span key={i} className="inline-flex items-center bg-white border border-indigo-200 text-indigo-700 px-3 py-1 rounded-full text-sm">
+                  {cat}
+                  <button onClick={() => removeOrgCategory(cat)} className="ml-2 text-indigo-400 hover:text-red-500">
+                    <X size={14} />
+                  </button>
+                </span>
+              ))}
+              {data.organizerCategories.length === 0 && (
+                <span className="text-sm text-gray-400 italic">No specific categories added.</span>
+              )}
+            </div>
         </div>
 
-        <h3 className="font-semibold text-gray-700 mb-2">Judging Criteria</h3>
+        <h3 className="font-semibold text-gray-700 mb-2">Judging Criteria List</h3>
+        <p className="text-xs text-gray-500 mb-3">These appear on the scoring sheet. Category-specific criteria will only appear for projects in that category.</p>
         <div className="space-y-4">
           {data.criteria.map((crit) => (
             <div key={crit.id} className="border p-3 rounded bg-gray-50">
@@ -297,7 +396,7 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
             </div>
           ))}
           <button onClick={addCriteria} className="w-full py-2 border-2 border-dashed border-gray-300 text-gray-500 rounded hover:bg-gray-50">
-            + Add Criterion
+            + Add Custom Criterion
           </button>
         </div>
       </section>

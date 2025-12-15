@@ -14,11 +14,25 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
   const [note, setNote] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Helper to determine if a criterion should be shown for this project
+  const getRelevantCriteria = (project: Project) => {
+    return data.criteria.filter(c => {
+        // If this criterion name matches an organizer category
+        if (data.organizerCategories.includes(c.name)) {
+            // Only show it if the project has this specific category tag
+            return project.categories.includes(c.name);
+        }
+        // Otherwise, it's a general criterion (like "Originality", "Design"), so show it.
+        return true;
+    });
+  };
+
   // Reset scores when selecting a new project
   const handleProjectSelect = (p: Project) => {
     setSelectedProject(p);
+    const relevant = getRelevantCriteria(p);
     const initialScores: Record<string, number> = {};
-    data.criteria.forEach(c => initialScores[c.id] = 1);
+    relevant.forEach(c => initialScores[c.id] = 1);
     setScores(initialScores);
     setNote('');
   };
@@ -82,6 +96,8 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
   }
 
   if (selectedProject) {
+    const relevantCriteria = getRelevantCriteria(selectedProject);
+
     return (
       <div className="bg-white min-h-screen pb-20">
         <div className="sticky top-0 bg-white border-b px-4 py-3 flex justify-between items-center z-10">
@@ -93,12 +109,18 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
         <div className="p-4 space-y-6">
             <div className="bg-indigo-50 p-4 rounded-lg">
                 <h2 className="text-xl font-bold text-indigo-800">{selectedProject.name}</h2>
-                <p className="text-sm text-indigo-600">{selectedProject.category}</p>
+                <div className="flex flex-wrap gap-1 mt-1">
+                    {selectedProject.categories.map((c, i) => (
+                        <span key={i} className="inline-block px-2 py-0.5 bg-indigo-200 text-indigo-800 text-xs rounded-full">
+                            {c}
+                        </span>
+                    ))}
+                </div>
                 {selectedProject.description && <p className="mt-2 text-sm text-gray-700">{selectedProject.description}</p>}
             </div>
 
             <div className="space-y-6">
-                {data.criteria.map(c => (
+                {relevantCriteria.map(c => (
                     <div key={c.id} className="border-b pb-4 last:border-0">
                         <div className="flex justify-between items-baseline mb-2">
                             <label className="font-bold text-gray-800">{c.name}</label>
@@ -184,7 +206,12 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
                 <div>
                     <div className="flex items-center gap-2 mb-1">
                         <span className="bg-gray-800 text-white text-xs font-bold px-2 py-0.5 rounded">Table {p.table}</span>
-                        <span className="text-gray-400 text-xs">{p.category}</span>
+                        <div className="flex gap-1 overflow-hidden">
+                           {p.categories.slice(0, 2).map((c, i) => (
+                               <span key={i} className="text-gray-500 text-xs bg-gray-100 px-1 rounded truncate max-w-[100px]">{c}</span>
+                           ))}
+                           {p.categories.length > 2 && <span className="text-gray-400 text-xs">+{p.categories.length - 2}</span>}
+                        </div>
                     </div>
                     <h3 className="font-bold text-gray-800">{p.name}</h3>
                 </div>
