@@ -20,7 +20,6 @@ const Tooltip = ({ text }: { text: string }) => (
 export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => {
   const [newJudge, setNewJudge] = useState<Partial<Judge>>({});
   const [editingJudgeId, setEditingJudgeId] = useState<string | null>(null);
-  const [newOrg, setNewOrg] = useState<Partial<Organizer>>({ role: OrganizerRoleType.DEVPOST });
   const [newOrgCat, setNewOrgCat] = useState('');
 
   const updateField = (field: keyof HackathonData, value: any) => {
@@ -54,15 +53,20 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
     updateField('judges', data.judges.filter(j => j.id !== id));
   };
 
-  const addOrg = () => {
-    if (newOrg.name && newOrg.phone && newOrg.role) {
-      updateField('organizers', [...data.organizers, { ...newOrg } as Organizer]);
-      setNewOrg({ name: '', phone: '', email: '', role: OrganizerRoleType.DEVPOST });
-    }
+  // Organizer Management
+  const updateOrganizer = (index: number, field: keyof Organizer, value: string) => {
+    const updated = [...data.organizers];
+    updated[index] = { ...updated[index], [field]: value };
+    updateField('organizers', updated);
   };
 
-  const removeOrg = (phone: string, role: string) => {
-    updateField('organizers', data.organizers.filter(o => !(o.phone === phone && o.role === role)));
+  const addEmptyOrganizer = () => {
+     updateField('organizers', [...data.organizers, { name: '', phone: '', email: '', role: OrganizerRoleType.DEVPOST }]);
+  };
+
+  const removeOrganizer = (index: number) => {
+    const updated = data.organizers.filter((_, i) => i !== index);
+    updateField('organizers', updated);
   };
 
   // Criteria Helpers
@@ -285,39 +289,51 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
           <p>Assign distinct organizers to these critical roles. One organizer cannot hold multiple roles.</p>
         </div>
         
-        <div className="flex gap-2 mb-4 flex-col md:flex-row items-end">
-          <div className="w-full md:w-1/3">
-             <label className="text-xs font-semibold text-gray-500">Name</label>
-             <input className="border p-2 rounded w-full" value={newOrg.name || ''} onChange={e => setNewOrg({...newOrg, name: e.target.value})} />
-          </div>
-          <div className="w-full md:w-1/3">
-             <label className="text-xs font-semibold text-gray-500">Phone</label>
-             <input className="border p-2 rounded w-full" value={newOrg.phone || ''} onChange={e => setNewOrg({...newOrg, phone: e.target.value})} />
-          </div>
-          <div className="w-full md:w-1/3">
-            <label className="text-xs font-semibold text-gray-500">Role</label>
-            <select className="border p-2 rounded w-full" value={newOrg.role} onChange={e => setNewOrg({...newOrg, role: e.target.value as OrganizerRoleType})}>
-              {Object.values(OrganizerRoleType).map(r => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
-          </div>
-          <button onClick={addOrg} className="bg-indigo-600 text-white p-2 rounded w-full md:w-auto flex justify-center">
-            <Plus size={20} />
-          </button>
-        </div>
-
-        <ul className="space-y-2">
+        <div className="space-y-3">
           {data.organizers.map((org, idx) => (
-            <li key={idx} className="flex justify-between items-center bg-gray-50 p-2 rounded text-sm">
-              <div>
-                <span className="font-bold block">{org.role}</span>
-                <span className="text-gray-600">{org.name} ({org.phone})</span>
+            <div key={idx} className="flex gap-2 items-start bg-gray-50 p-3 rounded border border-gray-100">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 flex-grow">
+                 <div className="flex flex-col">
+                    <label className="text-xs font-semibold text-gray-500 mb-0.5">Role</label>
+                    <select 
+                        className="border p-1.5 rounded text-sm bg-gray-50" 
+                        value={org.role} 
+                        onChange={e => updateOrganizer(idx, 'role', e.target.value)}
+                    >
+                        {Object.values(OrganizerRoleType).map(r => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                    </select>
+                 </div>
+                 <div className="flex flex-col">
+                    <label className="text-xs font-semibold text-gray-500 mb-0.5">Name</label>
+                    <input 
+                        className="border p-1.5 rounded text-sm" 
+                        value={org.name} 
+                        onChange={e => updateOrganizer(idx, 'name', e.target.value)}
+                        placeholder="Organizer Name"
+                    />
+                 </div>
+                 <div className="flex flex-col">
+                    <label className="text-xs font-semibold text-gray-500 mb-0.5">Phone</label>
+                    <input 
+                        className="border p-1.5 rounded text-sm" 
+                        value={org.phone} 
+                        onChange={e => updateOrganizer(idx, 'phone', e.target.value)}
+                        placeholder="Phone Number"
+                    />
+                 </div>
               </div>
-              <button onClick={() => removeOrg(org.phone, org.role)} className="text-red-500"><Trash2 size={16}/></button>
-            </li>
+              <button onClick={() => removeOrganizer(idx)} className="text-gray-400 hover:text-red-500 mt-5">
+                  <Trash2 size={18}/>
+              </button>
+            </div>
           ))}
-        </ul>
+        </div>
+        
+        <button onClick={addEmptyOrganizer} className="mt-4 flex items-center gap-2 text-sm text-indigo-600 font-medium hover:text-indigo-800">
+            <Plus size={16} /> Add Another Organizer
+        </button>
       </section>
 
       {/* 6. Categories & Criteria */}

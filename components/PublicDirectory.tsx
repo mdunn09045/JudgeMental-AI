@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { HackathonData } from '../types';
-import { Search, Filter, MapPin } from 'lucide-react';
+import { Search, Filter, MapPin, LogOut, Users } from 'lucide-react';
 
 interface Props {
   data: HackathonData;
+  onExit?: () => void;
 }
 
-export const PublicDirectory: React.FC<Props> = ({ data }) => {
+export const PublicDirectory: React.FC<Props> = ({ data, onExit }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
@@ -46,9 +47,19 @@ export const PublicDirectory: React.FC<Props> = ({ data }) => {
     <div className="min-h-screen bg-gray-50 pb-20 animate-fade-in">
         {/* Header Section */}
         <div className="bg-indigo-700 text-white p-6 shadow-lg rounded-b-xl mb-6">
-            <h1 className="text-2xl font-bold mb-2 flex items-center gap-2">
-                <MapPin size={24} /> Project Directory
-            </h1>
+            <div className="flex justify-between items-start mb-2">
+                <h1 className="text-2xl font-bold flex items-center gap-2">
+                    <MapPin size={24} /> Project Directory
+                </h1>
+                {onExit && (
+                    <button 
+                        onClick={onExit}
+                        className="flex items-center gap-1 text-xs bg-indigo-800 hover:bg-indigo-600 text-indigo-100 px-3 py-1.5 rounded transition-colors border border-indigo-600"
+                    >
+                        <LogOut size={14} /> Exit
+                    </button>
+                )}
+            </div>
             <p className="text-indigo-200 text-sm mb-4">Find teams, table numbers, and project details.</p>
             
             <div className="relative max-w-2xl mx-auto">
@@ -115,17 +126,20 @@ export const PublicDirectory: React.FC<Props> = ({ data }) => {
                     <div className="flex-grow min-w-0 flex flex-col justify-center">
                         <h3 className="font-bold text-gray-900 text-lg leading-tight mb-1">{p.name}</h3>
                         
-                        <div className="flex flex-wrap gap-1.5 mb-2">
+                        {p.teamMembers && p.teamMembers.length > 0 && (
+                            <div className="flex items-start gap-1.5 text-sm text-gray-600 mb-2">
+                                <Users size={14} className="mt-0.5 text-indigo-400 shrink-0"/>
+                                <span className="line-clamp-1">{p.teamMembers.join(', ')}</span>
+                            </div>
+                        )}
+
+                        <div className="flex flex-wrap gap-1.5">
                             {p.categories.map((c, i) => (
                                 <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
                                     {c}
                                 </span>
                             ))}
                         </div>
-
-                        {p.description && (
-                            <p className="text-sm text-gray-600 line-clamp-2">{p.description}</p>
-                        )}
                     </div>
                 </div>
             ))}

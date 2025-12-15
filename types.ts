@@ -35,6 +35,8 @@ export interface Project {
   categories: string[]; // List of tracks or prizes
   description?: string;
   noShow?: boolean;
+  teamMembers: string[];
+  submitterEmail?: string;
 }
 
 export interface Score {
@@ -112,6 +114,14 @@ const DEFAULT_JUDGES: Judge[] = Array.from({ length: 15 }, (_, i) => ({
   phone: '1234567890',
 }));
 
+// Pre-populate organizers with one entry per role
+const DEFAULT_ORGANIZERS: Organizer[] = Object.values(OrganizerRoleType).map(role => ({
+  name: '',
+  phone: '',
+  email: '',
+  role: role
+}));
+
 export const INITIAL_DATA: HackathonData = {
   eventName: "",
   estimatedCheckIns: 0,
@@ -127,7 +137,7 @@ export const INITIAL_DATA: HackathonData = {
   tableCount: 0,
   judgesPerProject: 3,
   judges: DEFAULT_JUDGES,
-  organizers: [],
+  organizers: DEFAULT_ORGANIZERS,
   sponsorCategories: [],
   organizerCategories: [],
   criteria: DEFAULT_CRITERIA,

@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { HackathonData, Project } from '../types';
-import { Plus, Trash2, FileText, Upload, FileSpreadsheet, Info } from 'lucide-react';
+import { Plus, Trash2, FileText, Upload, FileSpreadsheet, Info, X, Mail } from 'lucide-react';
 
 interface Props {
   data: HackathonData;
@@ -9,24 +9,37 @@ interface Props {
 
 export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
   // We use a temporary string for category input in manual entry
-  const [newProject, setNewProject] = useState<{name: string, table: string, categoriesStr: string, description: string}>({ 
-    name: '', table: '', categoriesStr: 'General', description: '' 
+  const [newProject, setNewProject] = useState<{name: string, table: string, categoriesStr: string, teamMembersStr: string, submitterEmail: string, description: string}>({ 
+    name: '', table: '', categoriesStr: 'General', teamMembersStr: '', submitterEmail: '', description: '' 
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Compute all unique categories available in the system
+  const allKnownCategories = useMemo(() => {
+    const cats = new Set<string>();
+    data.organizerCategories.forEach(c => cats.add(c));
+    data.sponsorCategories.forEach(c => cats.add(c));
+    data.projects.forEach(p => p.categories.forEach(c => cats.add(c)));
+    return Array.from(cats).sort();
+  }, [data]);
 
   const addProject = () => {
     if (newProject.name && newProject.table) {
       const categories = newProject.categoriesStr.split(',').map(c => c.trim()).filter(c => c.length > 0);
+      const teamMembers = newProject.teamMembersStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
+      
       const p: Project = {
         id: Date.now().toString(),
         name: newProject.name,
         table: newProject.table,
         categories: categories.length > 0 ? categories : ['General'],
+        teamMembers: teamMembers,
+        submitterEmail: newProject.submitterEmail,
         description: newProject.description,
         noShow: false
       };
       onChange({ ...data, projects: [...data.projects, p] });
-      setNewProject({ name: '', table: '', categoriesStr: 'General', description: '' });
+      setNewProject({ name: '', table: '', categoriesStr: 'General', teamMembersStr: '', submitterEmail: '', description: '' });
     }
   };
 
@@ -108,12 +121,16 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
         const headers = rows[0].map(h => h.toLowerCase().trim());
         
         // Detect Columns
-        // Devpost uses "Project Title", "Opt-In Prizes", "Submission Url"
-        // Simple CSV uses "Name", "Table", "Category"
         const nameIdx = headers.findIndex(h => h === 'project title' || h === 'name' || h === 'project name');
-        const tableIdx = headers.findIndex(h => h.includes('table'));
+        const tableIdx = headers.findIndex(h => h.includes('table') && !h.includes('assignment'));
         const catIdx = headers.findIndex(h => h === 'opt-in prizes' || h === 'category' || h === 'track');
-        const descIdx = headers.findIndex(h => h === 'about the project' || h === 'description' || h === 'submission url');
+        const descIdx = headers.findIndex(h => h === 'about the project' || h === 'description');
+        const emailIdx = headers.findIndex(h => h === 'submitter email' || h === 'email');
+
+        // Devpost Team Members logic
+        const subFirstIdx = headers.findIndex(h => h === 'submitter first name');
+        const subLastIdx = headers.findIndex(h => h === 'submitter last name');
+        const genericTeamIdx = headers.findIndex(h => h === 'team members' || h === 'team');
 
         if (nameIdx === -1) {
             alert("Could not detect 'Project Title' or 'Name' column in the CSV.");
@@ -124,7 +141,10 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
         
         // Auto-assign tables logic
         let nextTableNum = getMaxTableNumber(data.projects) + 1;
-        const projectTableMap = new Map<string, string>(); // Keep same table for same project name
+        
+        // Map to prevent duplicates if same file uploaded, 
+        // AND to group by email if table missing
+        const projectTableMap = new Map<string, string>(); 
 
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i];
@@ -137,17 +157,21 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
             const name = row[nameIdx];
             if (!name) continue;
 
+            // Identifier for table assignment: Email > Name
+            const email = emailIdx !== -1 && row[emailIdx] ? row[emailIdx].trim() : '';
+            const uniqueKey = email || name;
+
             // Determine Table Number
             let table = '';
             if (tableIdx !== -1 && row[tableIdx]) {
                 table = row[tableIdx];
             } else {
                 // Auto-assign table if missing
-                if (projectTableMap.has(name)) {
-                    table = projectTableMap.get(name)!;
+                if (projectTableMap.has(uniqueKey)) {
+                    table = projectTableMap.get(uniqueKey)!;
                 } else {
                     table = nextTableNum.toString();
-                    projectTableMap.set(name, table);
+                    projectTableMap.set(uniqueKey, table);
                     nextTableNum++;
                 }
             }
@@ -165,11 +189,40 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
                 }
             }
 
+            // Handle Team Members
+            const teamMembers: string[] = [];
+
+            // 1. Try generic column
+            if (genericTeamIdx !== -1 && row[genericTeamIdx]) {
+                teamMembers.push(...row[genericTeamIdx].split(',').map(s => s.trim()));
+            } else {
+                // 2. Try Devpost columns (Submitter + Team Member 1-4)
+                if (subFirstIdx !== -1) {
+                    const first = row[subFirstIdx] || '';
+                    const last = (subLastIdx !== -1 ? row[subLastIdx] : '') || '';
+                    if (first || last) teamMembers.push(`${first} ${last}`.trim());
+                }
+
+                // Check for "Team Member N First Name"
+                for (let j = 1; j <= 4; j++) {
+                    const fIdx = headers.findIndex(h => h === `team member ${j} first name`);
+                    const lIdx = headers.findIndex(h => h === `team member ${j} last name`);
+                    
+                    if (fIdx !== -1) {
+                        const first = row[fIdx] || '';
+                        const last = (lIdx !== -1 ? row[lIdx] : '') || '';
+                        if (first || last) teamMembers.push(`${first} ${last}`.trim());
+                    }
+                }
+            }
+
             newProjects.push({
                 id: `import-${Date.now()}-${i}`,
                 name: name,
                 table: table,
                 categories: categories,
+                teamMembers: teamMembers,
+                submitterEmail: email,
                 description: description.substring(0, 200) + (description.length > 200 ? '...' : ''), // Truncate description for UI perf
                 noShow: false
             });
@@ -194,6 +247,11 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
 
   const generateDemoProjects = () => {
     const categoriesList = ['FinTech', 'Health', 'Sustainability', 'Education', 'Gaming', 'Mobile', 'Web3'];
+    const firstNames = ['Alex', 'Sam', 'Jordan', 'Taylor', 'Casey', 'Riley', 'Morgan', 'Quinn'];
+    const lastNames = ['Smith', 'Chen', 'Kim', 'Patel', 'Garcia', 'Johnson', 'Lee'];
+
+    const getRandName = () => `${firstNames[Math.floor(Math.random()*firstNames.length)]} ${lastNames[Math.floor(Math.random()*lastNames.length)]}`;
+
     const demoProjects: Project[] = Array.from({ length: 15 }).map((_, i) => {
         // Assign random categories
         const numCats = Math.floor(Math.random() * 3) + 1; // 1 to 3 categories
@@ -202,12 +260,18 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
             cats.push(categoriesList[(i + j) % categoriesList.length]);
         }
         
+        // Random Team
+        const numMembers = Math.floor(Math.random() * 3) + 1;
+        const members = Array.from({ length: numMembers }).map(() => getRandName());
+
         return {
             id: `demo-${i}`,
             name: `Project ${['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'][i%5]} ${i+1}`,
             table: `${i + 1}`,
             categories: cats,
-            description: 'A revolutionary app that solves big problems.',
+            teamMembers: members,
+            submitterEmail: `hacker${i}@university.edu`,
+            description: 'A revolutionary app that solves big problems using AI and blockchain technology to disrupt the market.',
             noShow: false
         };
     });
@@ -253,8 +317,8 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
             <div>
                 <p className="font-semibold mb-1">CSV Import Guide:</p>
                 <ul className="list-disc list-inside space-y-1 ml-1 text-xs sm:text-sm">
-                    <li><strong>Devpost Export:</strong> Supports "Project Title" and "Opt-In Prizes" (imported as tags). Auto-assigns tables if missing.</li>
-                    <li><strong>Custom CSV:</strong> Required header "Name". Optional: "Table", "Category" (comma separated), "Description".</li>
+                    <li><strong>Devpost Export:</strong> Supports "Project Title", "Opt-In Prizes", "Submitter Email", "Team Members".</li>
+                    <li><strong>Duplicate Names:</strong> Projects with the same name are distinguished by "Submitter Email" during import.</li>
                 </ul>
             </div>
         </div>
@@ -262,23 +326,37 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
         <div className="grid gap-2 mb-6 p-4 bg-gray-50 rounded border border-gray-100">
           <h3 className="font-semibold text-sm text-gray-700">Add Single Project</h3>
           <div className="flex gap-2 flex-col md:flex-row">
-            <input 
-              placeholder="Project Name" 
-              className="border p-2 rounded flex-grow"
-              value={newProject.name || ''}
-              onChange={e => setNewProject({...newProject, name: e.target.value})}
-            />
+            <div className="flex-grow flex gap-2">
+                <input 
+                  placeholder="Project Name" 
+                  className="border p-2 rounded w-full"
+                  value={newProject.name || ''}
+                  onChange={e => setNewProject({...newProject, name: e.target.value})}
+                />
+                <input 
+                  placeholder="Email (ID)" 
+                  className="border p-2 rounded w-48"
+                  value={newProject.submitterEmail || ''}
+                  onChange={e => setNewProject({...newProject, submitterEmail: e.target.value})}
+                />
+            </div>
             <input 
               placeholder="Table #" 
-              className="border p-2 rounded w-full md:w-24"
+              className="border p-2 rounded w-full md:w-20"
               value={newProject.table || ''}
               onChange={e => setNewProject({...newProject, table: e.target.value})}
             />
              <input 
               placeholder="Categories (comma separated)" 
-              className="border p-2 rounded w-full md:w-64"
+              className="border p-2 rounded w-full md:w-32"
               value={newProject.categoriesStr || ''}
               onChange={e => setNewProject({...newProject, categoriesStr: e.target.value})}
+            />
+             <input 
+              placeholder="Team Members (comma separated)" 
+              className="border p-2 rounded w-full md:w-32"
+              value={newProject.teamMembersStr || ''}
+              onChange={e => setNewProject({...newProject, teamMembersStr: e.target.value})}
             />
             <button onClick={addProject} className="bg-indigo-600 text-white p-2 rounded flex items-center justify-center min-w-[3rem]">
               <Plus size={20} />
@@ -292,15 +370,16 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
               <tr>
                 <th className="px-4 py-3">No Show</th>
                 <th className="px-4 py-3">Table</th>
-                <th className="px-4 py-3">Project Name</th>
-                <th className="px-4 py-3">Categories (Comma Sep)</th>
+                <th className="px-4 py-3">Project Name / Email</th>
+                <th className="px-4 py-3">Team Members</th>
+                <th className="px-4 py-3 min-w-[200px]">Categories</th>
                 <th className="px-4 py-3 text-right">Action</th>
               </tr>
             </thead>
             <tbody>
               {data.projects.length === 0 ? (
                 <tr>
-                    <td colSpan={5} className="text-center py-8 text-gray-400 italic">No projects added yet.</td>
+                    <td colSpan={6} className="text-center py-8 text-gray-400 italic">No projects added yet.</td>
                 </tr>
               ) : (
                   data.projects.map(p => (
@@ -314,8 +393,29 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
                         />
                       </td>
                       <td className={`px-4 py-3 font-mono font-bold ${p.noShow ? 'text-gray-400' : 'text-indigo-600'}`}>{p.table}</td>
-                      <td className={`px-4 py-3 font-medium ${p.noShow ? 'line-through' : ''}`}>{p.name}</td>
                       <td className="px-4 py-3">
+                          <div className={`font-medium ${p.noShow ? 'line-through' : ''}`}>{p.name}</div>
+                          {p.submitterEmail && (
+                              <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
+                                  <Mail size={10} />
+                                  {p.submitterEmail}
+                              </div>
+                          )}
+                      </td>
+                      <td className="px-4 py-3">
+                          <input 
+                            type="text" 
+                            value={p.teamMembers?.join(', ') || ''}
+                            onChange={(e) => {
+                                const members = e.target.value.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                                updateProjectField(p.id, 'teamMembers', members);
+                            }}
+                            placeholder="Add members..."
+                            className={`border-b bg-transparent focus:border-indigo-500 outline-none w-full text-xs ${p.noShow ? 'text-gray-400' : 'text-gray-600'}`}
+                         />
+                      </td>
+                      <td className="px-4 py-3">
+                         {/* Edit via text */}
                          <input 
                             type="text" 
                             value={p.categories.join(', ')}
@@ -323,15 +423,47 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
                                 const cats = e.target.value.split(',').map(s => s.trim()).filter(s => s.length > 0);
                                 updateProjectField(p.id, 'categories', cats);
                             }}
-                            className={`border-b bg-transparent focus:border-indigo-500 outline-none w-full ${p.noShow ? 'text-gray-400' : 'text-gray-700'}`}
+                            placeholder="Type to add tags..."
+                            className={`border-b bg-transparent focus:border-indigo-500 outline-none w-full text-xs mb-2 ${p.noShow ? 'text-gray-400' : 'text-gray-700'}`}
                          />
-                         <div className="flex flex-wrap gap-1 mt-1">
+                         
+                         {/* Badges with Delete */}
+                         <div className="flex flex-wrap gap-1 mb-2">
                              {p.categories.map((c, i) => (
-                                 <span key={i} className="inline-block px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">
+                                 <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 text-xs rounded-full group">
                                      {c}
+                                     <button
+                                        onClick={() => {
+                                            const newCats = p.categories.filter((_, idx) => idx !== i);
+                                            updateProjectField(p.id, 'categories', newCats);
+                                        }}
+                                        className="text-indigo-400 hover:text-red-500 focus:outline-none opacity-0 group-hover:opacity-100 transition-opacity"
+                                        title="Remove"
+                                     >
+                                         <X size={10} />
+                                     </button>
                                  </span>
                              ))}
                          </div>
+
+                         {/* Quick Add Dropdown */}
+                         <select
+                            className="w-full text-xs border border-gray-200 rounded p-1.5 bg-gray-50 text-gray-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all cursor-pointer hover:bg-white"
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                if (val && !p.categories.includes(val)) {
+                                    updateProjectField(p.id, 'categories', [...p.categories, val]);
+                                }
+                                e.target.value = '';
+                            }}
+                            defaultValue=""
+                            disabled={p.noShow}
+                         >
+                            <option value="" disabled>+ Add category...</option>
+                             {allKnownCategories.filter(c => !p.categories.includes(c)).map(c => (
+                                <option key={c} value={c}>{c}</option>
+                            ))}
+                         </select>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button onClick={() => removeProject(p.id)} className="text-red-500 hover:text-red-700">

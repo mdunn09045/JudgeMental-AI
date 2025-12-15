@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { HackathonData, Judge, Project, Score } from '../types';
-import { Check, Search, AlertCircle, ChevronRight } from 'lucide-react';
+import { Check, Search, AlertCircle, ChevronRight, CheckCircle2, Users } from 'lucide-react';
 
 interface Props {
   data: HackathonData;
@@ -27,21 +27,36 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
     });
   };
 
-  // Reset scores when selecting a new project
+  // Helper: Get existing score for current judge & project
+  const getExistingScore = (projectId: string) => {
+      if (!activeJudge) return undefined;
+      return data.scores.find(s => s.judgeId === activeJudge.id && s.projectId === projectId);
+  };
+
+  // Reset scores or load existing when selecting a project
   const handleProjectSelect = (p: Project) => {
     setSelectedProject(p);
     const relevant = getRelevantCriteria(p);
-    const initialScores: Record<string, number> = {};
-    relevant.forEach(c => initialScores[c.id] = 1);
-    setScores(initialScores);
-    setNote('');
+    const existing = getExistingScore(p.id);
+
+    if (existing) {
+        setScores(existing.criteria);
+        setNote(existing.note);
+    } else {
+        const initialScores: Record<string, number> = {};
+        relevant.forEach(c => initialScores[c.id] = 1);
+        setScores(initialScores);
+        setNote('');
+    }
   };
 
   const submitScore = () => {
     if (!activeJudge || !selectedProject) return;
     
+    const existing = getExistingScore(selectedProject.id);
+
     const newScore: Score = {
-      id: Date.now().toString(),
+      id: existing ? existing.id : Date.now().toString(),
       judgeId: activeJudge.id,
       projectId: selectedProject.id,
       criteria: scores,
@@ -49,9 +64,18 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
       timestamp: new Date().toISOString()
     };
 
+    let updatedScores = [...data.scores];
+    if (existing) {
+        // Update existing score
+        updatedScores = updatedScores.map(s => s.id === existing.id ? newScore : s);
+    } else {
+        // Add new score
+        updatedScores.push(newScore);
+    }
+
     onChange({
       ...data,
-      scores: [...data.scores, newScore]
+      scores: updatedScores
     });
     
     setSelectedProject(null); // Return to list
@@ -68,17 +92,14 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
     p.table.includes(searchTerm))
   );
 
-  // Filter out projects already judged by this judge
-  const availableProjects = filteredProjects.filter(p => 
-    !data.scores.some(s => s.judgeId === activeJudge?.id && s.projectId === p.id)
-  );
+  // We no longer filter out judged projects from the list, we just mark them.
 
   if (!activeJudge) {
     return (
-      <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-sm border border-gray-200 mt-10">
+      <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-sm border border-gray-200 mt-10 animate-fade-in">
         <h2 className="text-xl font-bold text-center mb-6">Welcome, Judge!</h2>
         <p className="text-gray-600 mb-4 text-center">Please select your name to begin.</p>
-        <div className="space-y-2 max-h-96 overflow-y-auto">
+        <div className="space-y-2">
           {data.judges.length === 0 && <p className="text-center text-red-500">No judges found. Please add judges in Pre-Event Planning.</p>}
           {data.judges.map(j => (
             <button 
@@ -97,18 +118,25 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
 
   if (selectedProject) {
     const relevantCriteria = getRelevantCriteria(selectedProject);
+    const isEditing = !!getExistingScore(selectedProject.id);
 
     return (
-      <div className="bg-white min-h-screen pb-20">
-        <div className="sticky top-0 bg-white border-b px-4 py-3 flex justify-between items-center z-10">
-             <button onClick={() => setSelectedProject(null)} className="text-gray-500 text-sm">Cancel</button>
-             <h3 className="font-bold">Scoring Table {selectedProject.table}</h3>
+      <div className="bg-white min-h-screen pb-20 animate-fade-in">
+        <div className="sticky top-0 bg-white border-b px-4 py-3 flex justify-between items-center z-10 shadow-sm">
+             <button onClick={() => setSelectedProject(null)} className="text-gray-500 text-sm font-medium">Cancel</button>
+             <h3 className="font-bold text-gray-800">Scoring Table {selectedProject.table}</h3>
              <div className="w-8"></div>
         </div>
         
-        <div className="p-4 space-y-6">
-            <div className="bg-indigo-50 p-4 rounded-lg">
+        <div className="p-4 space-y-6 max-w-2xl mx-auto">
+            <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
                 <h2 className="text-xl font-bold text-indigo-800">{selectedProject.name}</h2>
+                {selectedProject.teamMembers && selectedProject.teamMembers.length > 0 && (
+                   <div className="flex items-center gap-2 text-sm text-indigo-700 mt-1 mb-2">
+                      <Users size={14} />
+                      <span>{selectedProject.teamMembers.join(', ')}</span>
+                   </div>
+                )}
                 <div className="flex flex-wrap gap-1 mt-1">
                     {selectedProject.categories.map((c, i) => (
                         <span key={i} className="inline-block px-2 py-0.5 bg-indigo-200 text-indigo-800 text-xs rounded-full">
@@ -128,7 +156,6 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
                         </div>
                         <p className="text-xs text-gray-500 mb-3">{c.description}</p>
                         
-                        {/* Assuming 1-3 scale as per prompt default, but making it flexible */}
                         <div className="flex gap-2">
                             {[1, 2, 3].map(val => (
                                 <button
@@ -136,7 +163,7 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
                                     onClick={() => handleScoreChange(c.id, val)}
                                     className={`flex-1 py-3 rounded font-bold transition-all ${
                                         scores[c.id] === val 
-                                        ? 'bg-indigo-600 text-white shadow-md transform scale-105' 
+                                        ? 'bg-indigo-600 text-white shadow-md transform scale-105 ring-2 ring-indigo-300' 
                                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                     }`}
                                 >
@@ -149,9 +176,9 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
             </div>
 
             <div>
-                <label className="font-bold block mb-2">Private Notes (Optional)</label>
+                <label className="font-bold block mb-2 text-gray-700">Private Notes (Optional)</label>
                 <textarea 
-                    className="w-full border p-3 rounded h-24" 
+                    className="w-full border p-3 rounded h-24 focus:ring-2 focus:ring-indigo-500 outline-none" 
                     placeholder="Feedback for organizers..."
                     value={note}
                     onChange={e => setNote(e.target.value)}
@@ -160,9 +187,9 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
 
             <button 
                 onClick={submitScore}
-                className="w-full py-4 bg-green-600 text-white text-lg font-bold rounded shadow-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                className={`w-full py-4 text-white text-lg font-bold rounded shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 ${isEditing ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-green-600 hover:bg-green-700'}`}
             >
-                <Check /> Submit Score
+                <Check /> {isEditing ? 'Update Score' : 'Submit Score'}
             </button>
         </div>
       </div>
@@ -170,19 +197,19 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
   }
 
   return (
-    <div className="pb-20">
+    <div className="pb-20 animate-fade-in">
       <div className="bg-indigo-900 text-white p-6 rounded-b-xl shadow-lg mb-6">
          <div className="flex justify-between items-center mb-4">
              <div>
                 <h1 className="text-2xl font-bold">Hello, {activeJudge.name}</h1>
                 <p className="text-indigo-200 text-sm">Select a project to judge.</p>
              </div>
-             <button onClick={() => setActiveJudge(null)} className="text-xs bg-indigo-800 px-2 py-1 rounded">Switch User</button>
+             <button onClick={() => setActiveJudge(null)} className="text-xs bg-indigo-800 hover:bg-indigo-700 px-3 py-1.5 rounded transition-colors border border-indigo-600">Switch User</button>
          </div>
-         <div className="relative">
+         <div className="relative max-w-md mx-auto">
              <Search className="absolute left-3 top-3 text-gray-400" size={18} />
              <input 
-                className="w-full p-2 pl-10 rounded text-gray-800" 
+                className="w-full p-2 pl-10 rounded text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400" 
                 placeholder="Search by table # or name..." 
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
@@ -190,35 +217,58 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
          </div>
       </div>
 
-      <div className="px-4 space-y-3">
-        {availableProjects.length === 0 && (
+      <div className="px-4 space-y-3 max-w-2xl mx-auto">
+        {filteredProjects.length === 0 && (
             <div className="text-center py-10 text-gray-500">
                 <AlertCircle className="w-12 h-12 mx-auto mb-2 opacity-30" />
                 <p>No projects found matching your search.</p>
             </div>
         )}
-        {availableProjects.map(p => (
-            <div 
-                key={p.id} 
-                onClick={() => handleProjectSelect(p)}
-                className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex justify-between items-center active:bg-gray-50 cursor-pointer"
-            >
-                <div>
-                    <div className="flex items-center gap-2 mb-1">
-                        <span className="bg-gray-800 text-white text-xs font-bold px-2 py-0.5 rounded">Table {p.table}</span>
-                        <div className="flex gap-1 overflow-hidden">
-                           {p.categories.slice(0, 2).map((c, i) => (
-                               <span key={i} className="text-gray-500 text-xs bg-gray-100 px-1 rounded truncate max-w-[100px]">{c}</span>
-                           ))}
-                           {p.categories.length > 2 && <span className="text-gray-400 text-xs">+{p.categories.length - 2}</span>}
+        
+        {filteredProjects.map(p => {
+            const isJudged = !!getExistingScore(p.id);
+            return (
+                <div 
+                    key={p.id} 
+                    onClick={() => handleProjectSelect(p)}
+                    className={`p-4 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer transition-all ${
+                        isJudged 
+                        ? 'bg-green-50 border-green-200 hover:bg-green-100' 
+                        : 'bg-white border-gray-100 hover:border-indigo-300 hover:shadow-md'
+                    }`}
+                >
+                    <div className="flex-1 min-w-0 pr-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded ${isJudged ? 'bg-green-200 text-green-800' : 'bg-gray-800 text-white'}`}>
+                                Table {p.table}
+                            </span>
+                            <div className="flex gap-1 overflow-hidden">
+                            {p.categories.slice(0, 2).map((c, i) => (
+                                <span key={i} className="text-gray-500 text-xs bg-gray-100 px-1 rounded truncate max-w-[100px] border border-gray-200">{c}</span>
+                            ))}
+                            </div>
                         </div>
+                        <h3 className={`font-bold truncate ${isJudged ? 'text-green-900' : 'text-gray-800'}`}>{p.name}</h3>
                     </div>
-                    <h3 className="font-bold text-gray-800">{p.name}</h3>
+                    
+                    {isJudged ? (
+                        <div className="flex items-center gap-1 text-green-600 text-sm font-bold bg-white px-2 py-1 rounded border border-green-100 shadow-sm">
+                            <CheckCircle2 size={16} />
+                            <span className="hidden sm:inline">Done</span>
+                        </div>
+                    ) : (
+                        <ChevronRight className="text-gray-300" />
+                    )}
                 </div>
-                <ChevronRight className="text-gray-300" />
-            </div>
-        ))}
+            );
+        })}
       </div>
+      
+      {filteredProjects.some(p => !!getExistingScore(p.id)) && (
+          <div className="text-center mt-6 text-xs text-gray-400">
+              <p>Green shaded projects have been scored. Click to edit.</p>
+          </div>
+      )}
     </div>
   );
 };
