@@ -25,6 +25,7 @@ export interface Criterion {
   name: string;
   description: string;
   scale: string;
+  weight: number;
 }
 
 export interface Project {
@@ -98,11 +99,11 @@ export interface StressTestResult {
 }
 
 export const DEFAULT_CRITERIA: Criterion[] = [
-  { id: '1', name: 'Completion', description: 'Does the hack work? Did the team achieve everything they wanted?', scale: '1-3' },
-  { id: '2', name: 'Originality', description: 'Has this project been done before? How creative is it?', scale: '1-3' },
-  { id: '3', name: 'Learning', description: 'Did the team stretch themselves? Did they try to learn something new?', scale: '1-3' },
-  { id: '4', name: 'Design', description: 'Did the team put thought into the user experience? UI design?', scale: '1-3' },
-  { id: '5', name: 'Technology', description: 'How technically impressive was the hack? Complexity?', scale: '1-3' },
+  { id: '1', name: 'Completion', description: 'Does the hack work? Did the team achieve everything they wanted?', scale: '1-3', weight: 1 },
+  { id: '2', name: 'Originality', description: 'Has this project been done before? How creative is it?', scale: '1-3', weight: 1 },
+  { id: '3', name: 'Learning', description: 'Did the team stretch themselves? Did they try to learn something new?', scale: '1-3', weight: 1 },
+  { id: '4', name: 'Design', description: 'Did the team put thought into the user experience? UI design?', scale: '1-3', weight: 1 },
+  { id: '5', name: 'Technology', description: 'How technically impressive was the hack? Complexity?', scale: '1-3', weight: 1 },
 ];
 
 const DEFAULT_JUDGES: Judge[] = Array.from({ length: 15 }, (_, i) => ({

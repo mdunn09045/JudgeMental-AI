@@ -205,7 +205,9 @@ export const calculateLeaderboard = (
       // Sum only the allowed criteria
       Object.entries(s.criteria).forEach(([cId, scoreVal]) => {
         if (includedCriteriaIds.has(cId)) {
-          totalPoints += scoreVal;
+          const criterion = criteria.find(c => c.id === cId);
+          const weight = criterion?.weight ?? 1;
+          totalPoints += scoreVal * weight;
         }
       });
     });

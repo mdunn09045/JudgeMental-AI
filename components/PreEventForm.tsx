@@ -67,10 +67,10 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
 
   // Criteria Helpers
   const addCriteria = () => {
-    updateField('criteria', [...data.criteria, { id: Date.now().toString(), name: 'New Criteria', description: '', scale: '1-3' }]);
+    updateField('criteria', [...data.criteria, { id: Date.now().toString(), name: 'New Criteria', description: '', scale: '1-3', weight: 1 }]);
   };
 
-  const updateCriteria = (id: string, field: keyof Criterion, val: string) => {
+  const updateCriteria = (id: string, field: keyof Criterion, val: string | number) => {
     updateField('criteria', data.criteria.map(c => c.id === id ? { ...c, [field]: val } : c));
   };
   
@@ -91,7 +91,8 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
         id: `gen-${Date.now()}`,
         name: catName,
         description: `Relevance/Quality specifically for the ${catName} track.`,
-        scale: '1-3'
+        scale: '1-3',
+        weight: 1
     };
     const updatedCriteria = [...data.criteria, newCriterion];
 
@@ -385,13 +386,26 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
                 value={crit.description}
                 onChange={(e) => updateCriteria(crit.id, 'description', e.target.value)}
               />
-              <div className="flex items-center text-xs text-gray-500">
-                <span>Scale: </span>
-                <input 
-                   className="ml-2 bg-transparent border-b w-16"
-                   value={crit.scale}
-                   onChange={(e) => updateCriteria(crit.id, 'scale', e.target.value)}
-                />
+              <div className="flex items-center text-xs text-gray-500 gap-4">
+                <div className="flex items-center">
+                    <span>Scale: </span>
+                    <input 
+                       className="ml-2 bg-transparent border-b w-16"
+                       value={crit.scale}
+                       onChange={(e) => updateCriteria(crit.id, 'scale', e.target.value)}
+                    />
+                </div>
+                <div className="flex items-center">
+                    <span>Weight (x): </span>
+                    <input 
+                       type="number"
+                       min="0.1"
+                       step="0.1"
+                       className="ml-2 bg-transparent border-b w-12 text-center font-bold text-indigo-600"
+                       value={crit.weight || 1}
+                       onChange={(e) => updateCriteria(crit.id, 'weight', parseFloat(e.target.value))}
+                    />
+                </div>
               </div>
             </div>
           ))}

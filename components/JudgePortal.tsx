@@ -124,7 +124,7 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
                     <div key={c.id} className="border-b pb-4 last:border-0">
                         <div className="flex justify-between items-baseline mb-2">
                             <label className="font-bold text-gray-800">{c.name}</label>
-                            <span className="text-xs text-gray-500">Scale: {c.scale}</span>
+                            <span className="text-xs text-gray-500">Scale: {c.scale} {(c.weight || 1) > 1 && <span className="text-indigo-600 font-bold ml-1">(x{c.weight})</span>}</span>
                         </div>
                         <p className="text-xs text-gray-500 mb-3">{c.description}</p>
                         
