@@ -8,7 +8,8 @@ import { GameTimePhase } from './components/GameTimePhase';
 import { ProjectManager } from './components/ProjectManager';
 import { JudgePortal } from './components/JudgePortal';
 import { LiveDashboard } from './components/LiveDashboard';
-import { Calendar, ClipboardList, Activity, LayoutDashboard, Menu, X, Users, Database, BarChart } from 'lucide-react';
+import { PublicDirectory } from './components/PublicDirectory';
+import { Calendar, ClipboardList, Activity, LayoutDashboard, Menu, X, Users, Database, BarChart, MapPin } from 'lucide-react';
 
 const STORAGE_KEY = 'judgeplan_pro_data_v2';
 
@@ -16,7 +17,8 @@ enum View {
   PLANNING = 'PLANNING',
   PROJECTS = 'PROJECTS',
   JUDGE_PORTAL = 'JUDGE_PORTAL',
-  DASHBOARD = 'DASHBOARD'
+  DASHBOARD = 'DASHBOARD',
+  PUBLIC_DIRECTORY = 'PUBLIC_DIRECTORY'
 }
 
 const App: React.FC = () => {
@@ -88,6 +90,7 @@ const App: React.FC = () => {
             <NavButton view={View.PROJECTS} icon={Database} label="Projects" />
             <NavButton view={View.JUDGE_PORTAL} icon={Users} label="Judge Portal" />
             <NavButton view={View.DASHBOARD} icon={BarChart} label="Live Dashboard" />
+            <NavButton view={View.PUBLIC_DIRECTORY} icon={MapPin} label="Directory" />
           </nav>
 
           {/* Mobile Menu Toggle */}
@@ -106,6 +109,7 @@ const App: React.FC = () => {
              <NavButton view={View.PROJECTS} icon={Database} label="Projects" />
              <NavButton view={View.JUDGE_PORTAL} icon={Users} label="Judge Portal" />
              <NavButton view={View.DASHBOARD} icon={BarChart} label="Live Dashboard" />
+             <NavButton view={View.PUBLIC_DIRECTORY} icon={MapPin} label="Directory" />
           </div>
         )}
       </header>
@@ -176,6 +180,8 @@ const App: React.FC = () => {
         {currentView === View.JUDGE_PORTAL && <JudgePortal data={data} onChange={setData} />}
         
         {currentView === View.DASHBOARD && <LiveDashboard data={data} />}
+
+        {currentView === View.PUBLIC_DIRECTORY && <PublicDirectory data={data} />}
 
       </main>
       
