@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { HackathonData, Project } from '../types';
-import { Plus, Trash2, FileText, Upload, FileSpreadsheet, Info, X, Mail } from 'lucide-react';
+import { HackathonData, Project, Assignment } from '../types';
+import { Plus, Trash2, FileText, Upload, FileSpreadsheet, Info, X, Mail, Shuffle, Zap, AlertTriangle } from 'lucide-react';
 
 interface Props {
   data: HackathonData;
@@ -8,10 +8,14 @@ interface Props {
 }
 
 export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
-  // We use a temporary string for category input in manual entry
   const [newProject, setNewProject] = useState<{name: string, table: string, categoriesStr: string, teamMembersStr: string, submitterEmail: string, description: string}>({ 
     name: '', table: '', categoriesStr: 'General', teamMembersStr: '', submitterEmail: '', description: '' 
   });
+  
+  // Assignment State
+  const [assignRounds, setAssignRounds] = useState<number>(3);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Compute all unique categories available in the system
@@ -23,6 +27,7 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
     return Array.from(cats).sort();
   }, [data]);
 
+  // --- CRUD Operations ---
   const addProject = () => {
     if (newProject.name && newProject.table) {
       const categories = newProject.categoriesStr.split(',').map(c => c.trim()).filter(c => c.length > 0);
@@ -54,7 +59,120 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
     });
   };
 
-  // Robust CSV Parser handling quotes and newlines
+  const confirmClearAll = () => {
+    onChange({
+        ...data,
+        projects: [],
+        assignments: [],
+        scores: [],
+        reports: []
+    });
+    setShowClearConfirm(false);
+  };
+
+  // --- Assignment Logic ---
+
+  const generateAssignments = () => {
+    if (data.judges.length === 0) {
+      alert("No judges available. Please add judges in the Planning tab.");
+      return;
+    }
+    if (data.projects.filter(p => !p.noShow).length === 0) {
+      alert("No active projects to assign.");
+      return;
+    }
+
+    const assignments: Assignment[] = [];
+    const activeProjects = data.projects.filter(p => !p.noShow).sort((a, b) => {
+        // Sort numeric if possible for logic, falling back to string
+        const tA = parseInt(a.table);
+        const tB = parseInt(b.table);
+        if (!isNaN(tA) && !isNaN(tB)) return tA - tB;
+        return a.table.localeCompare(b.table);
+    });
+
+    // Tracking judge load
+    const judgeLoad: Record<string, number> = {};
+    const judgeLastTable: Record<string, number> = {}; // Track the numeric table of the last assigned project
+    data.judges.forEach(j => {
+        judgeLoad[j.id] = 0;
+        judgeLastTable[j.id] = -999; // Initialize far away
+    });
+
+    // Algorithm: Greedy allocation with Proximity Constraint
+    
+    activeProjects.forEach(project => {
+        const tableNum = parseInt(project.table) || 0;
+        
+        // We need to find 'assignRounds' judges for this project
+        for (let r = 0; r < assignRounds; r++) {
+            
+            // Filter judges who haven't been assigned this project yet
+            let candidates = data.judges.filter(j => 
+                !assignments.some(a => a.judgeId === j.id && a.projectId === project.id)
+            );
+
+            // Scoring function for candidates
+            // Higher score = Better candidate
+            const scoredCandidates = candidates.map(judge => {
+                let score = 0;
+                
+                // 1. Load Balancing (Heavy weight)
+                score -= (judgeLoad[judge.id] * 50);
+
+                // 2. Proximity Constraint (The "10 table gap" rule)
+                const lastTable = judgeLastTable[judge.id];
+                const dist = Math.abs(tableNum - lastTable);
+
+                if (dist <= 10) {
+                    // Reward keeping them in flow
+                    score += 100;
+                } else if (judgeLoad[judge.id] === 0) {
+                    // Reward starting a fresh judge on a new cluster
+                    score += 50;
+                } else {
+                    // Penalize large jumps, but don't forbid (fallback)
+                    score -= dist;
+                }
+
+                // 3. Randomness
+                score += Math.random() * 20;
+
+                return { judge, score };
+            });
+
+            // Sort by score descending
+            scoredCandidates.sort((a, b) => b.score - a.score);
+
+            if (scoredCandidates.length > 0) {
+                const best = scoredCandidates[0].judge;
+                
+                assignments.push({
+                    id: `assign-${Date.now()}-${assignments.length}`,
+                    judgeId: best.id,
+                    projectId: project.id,
+                    status: 'pending'
+                });
+                
+                judgeLoad[best.id]++;
+                judgeLastTable[best.id] = tableNum;
+            }
+        }
+    });
+
+    // Update state
+    onChange({ ...data, assignments });
+    alert(`Generated ${assignments.length} assignments. Each project assigned approx ${assignRounds} times.`);
+  };
+
+  const clearAssignments = () => {
+      if(confirm("Are you sure? This will remove all judge assignments. Scores will remain.")) {
+          onChange({ ...data, assignments: [] });
+      }
+  };
+
+
+  // --- CSV Import ---
   const parseCSV = (text: string): string[][] => {
     const arr: string[][] = [];
     let quote = false;
@@ -117,17 +235,14 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
             return;
         }
 
-        // Headers (lower case for case insensitive matching)
         const headers = rows[0].map(h => h.toLowerCase().trim());
         
-        // Detect Columns
         const nameIdx = headers.findIndex(h => h === 'project title' || h === 'name' || h === 'project name');
         const tableIdx = headers.findIndex(h => h.includes('table') && !h.includes('assignment'));
         const catIdx = headers.findIndex(h => h === 'opt-in prizes' || h === 'category' || h === 'track');
         const descIdx = headers.findIndex(h => h === 'about the project' || h === 'description');
         const emailIdx = headers.findIndex(h => h === 'submitter email' || h === 'email');
 
-        // Devpost Team Members logic
         const subFirstIdx = headers.findIndex(h => h === 'submitter first name');
         const subLastIdx = headers.findIndex(h => h === 'submitter last name');
         const genericTeamIdx = headers.findIndex(h => h === 'team members' || h === 'team');
@@ -138,35 +253,23 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
         }
 
         const newProjects: Project[] = [];
-        
-        // Auto-assign tables logic
         let nextTableNum = getMaxTableNumber(data.projects) + 1;
-        
-        // Map to prevent duplicates if same file uploaded, 
-        // AND to group by email if table missing
         const projectTableMap = new Map<string, string>(); 
 
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i];
-            // Skip empty rows
             if (row.length === 0 || (row.length === 1 && !row[0])) continue;
-            
-            // Safety check for row length against name index
             if (row.length <= nameIdx) continue;
-
             const name = row[nameIdx];
             if (!name) continue;
 
-            // Identifier for table assignment: Email > Name
             const email = emailIdx !== -1 && row[emailIdx] ? row[emailIdx].trim() : '';
-            const uniqueKey = email || name;
+            const uniqueKey = `${name.toLowerCase().trim()}|${email.toLowerCase().trim()}`;
 
-            // Determine Table Number
             let table = '';
             if (tableIdx !== -1 && row[tableIdx]) {
                 table = row[tableIdx];
             } else {
-                // Auto-assign table if missing
                 if (projectTableMap.has(uniqueKey)) {
                     table = projectTableMap.get(uniqueKey)!;
                 } else {
@@ -177,43 +280,37 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
             }
 
             const description = descIdx !== -1 && row[descIdx] ? row[descIdx] : '';
-            
-            // Handle Categories / Opt-In Prizes as Tags
             let categories: string[] = ['General'];
             if (catIdx !== -1 && row[catIdx]) {
                 const catRaw = row[catIdx];
-                // Split by comma. Devpost uses comma separated list for prizes.
                 const split = catRaw.split(',').map(s => s.trim()).filter(s => s);
                 if (split.length > 0) {
                     categories = split;
                 }
             }
 
-            // Handle Team Members
             const teamMembers: string[] = [];
-
-            // 1. Try generic column
             if (genericTeamIdx !== -1 && row[genericTeamIdx]) {
                 teamMembers.push(...row[genericTeamIdx].split(',').map(s => s.trim()));
             } else {
-                // 2. Try Devpost columns (Submitter + Team Member 1-4)
                 if (subFirstIdx !== -1) {
                     const first = row[subFirstIdx] || '';
                     const last = (subLastIdx !== -1 ? row[subLastIdx] : '') || '';
                     if (first || last) teamMembers.push(`${first} ${last}`.trim());
                 }
-
-                // Check for "Team Member N First Name"
                 for (let j = 1; j <= 4; j++) {
                     const fIdx = headers.findIndex(h => h === `team member ${j} first name`);
                     const lIdx = headers.findIndex(h => h === `team member ${j} last name`);
-                    
                     if (fIdx !== -1) {
                         const first = row[fIdx] || '';
                         const last = (lIdx !== -1 ? row[lIdx] : '') || '';
                         if (first || last) teamMembers.push(`${first} ${last}`.trim());
                     }
                 }
+            }
+
+            if (newProjects.some(p => `${p.name.toLowerCase().trim()}|${(p.submitterEmail || '').toLowerCase().trim()}` === uniqueKey)) {
+                continue;
             }
 
             newProjects.push({
@@ -223,14 +320,32 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
                 categories: categories,
                 teamMembers: teamMembers,
                 submitterEmail: email,
-                description: description.substring(0, 200) + (description.length > 200 ? '...' : ''), // Truncate description for UI perf
+                description: description.substring(0, 200) + (description.length > 200 ? '...' : ''),
                 noShow: false
             });
         }
 
         if (newProjects.length > 0) {
-            onChange({ ...data, projects: [...data.projects, ...newProjects] });
-            alert(`Successfully imported ${newProjects.length} projects.`);
+            const existingOrg = new Set(data.organizerCategories);
+            const existingSpon = new Set(data.sponsorCategories);
+            const catsToAdd = new Set<string>();
+
+            newProjects.forEach(p => {
+                p.categories.forEach(c => {
+                    if (!existingOrg.has(c) && !existingSpon.has(c) && c !== 'General') {
+                        catsToAdd.add(c);
+                    }
+                });
+            });
+
+            const updatedSponCats = [...data.sponsorCategories, ...Array.from(catsToAdd)];
+
+            onChange({ 
+                ...data, 
+                projects: [...data.projects, ...newProjects],
+                sponsorCategories: updatedSponCats
+            });
+            alert(`Successfully imported ${newProjects.length} projects.${catsToAdd.size > 0 ? ` Automatically added ${catsToAdd.size} new categories.` : ''}`);
         } else {
             alert("No valid projects found in CSV.");
         }
@@ -238,8 +353,6 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
         console.error(err);
         alert("Failed to parse CSV. Please check the console for details.");
       }
-      
-      // Reset input
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsText(file);
@@ -253,14 +366,12 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
     const getRandName = () => `${firstNames[Math.floor(Math.random()*firstNames.length)]} ${lastNames[Math.floor(Math.random()*lastNames.length)]}`;
 
     const demoProjects: Project[] = Array.from({ length: 15 }).map((_, i) => {
-        // Assign random categories
-        const numCats = Math.floor(Math.random() * 3) + 1; // 1 to 3 categories
+        const numCats = Math.floor(Math.random() * 3) + 1; 
         const cats = [];
         for(let j=0; j<numCats; j++) {
             cats.push(categoriesList[(i + j) % categoriesList.length]);
         }
         
-        // Random Team
         const numMembers = Math.floor(Math.random() * 3) + 1;
         const members = Array.from({ length: numMembers }).map(() => getRandName());
 
@@ -271,15 +382,125 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
             categories: cats,
             teamMembers: members,
             submitterEmail: `hacker${i}@university.edu`,
-            description: 'A revolutionary app that solves big problems using AI and blockchain technology to disrupt the market.',
+            description: 'A revolutionary app that solves big problems.',
             noShow: false
         };
     });
-    onChange({ ...data, projects: [...data.projects, ...demoProjects] });
+    
+    // Auto-harvest for demo as well
+    const existingOrg = new Set(data.organizerCategories);
+    const existingSpon = new Set(data.sponsorCategories);
+    const catsToAdd = new Set<string>();
+    demoProjects.forEach(p => p.categories.forEach(c => {
+         if (!existingOrg.has(c) && !existingSpon.has(c) && c !== 'General') {
+             catsToAdd.add(c);
+         }
+    }));
+
+    onChange({ 
+        ...data, 
+        projects: [...data.projects, ...demoProjects],
+        sponsorCategories: [...data.sponsorCategories, ...Array.from(catsToAdd)]
+    });
   };
 
   return (
-    <div className="space-y-6 pb-20 animate-fade-in">
+    <div className="space-y-6 pb-20 animate-fade-in relative">
+        {/* Custom Confirmation Modal */}
+        {showClearConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+                <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 border-t-4 border-red-500">
+                    <div className="flex items-start gap-4 mb-4">
+                        <div className="bg-red-100 p-3 rounded-full shrink-0">
+                            <AlertTriangle className="w-6 h-6 text-red-600" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-900">Delete All Projects?</h3>
+                            <p className="text-sm text-gray-600 mt-1">
+                                This action is <strong>irreversible</strong>. It will delete:
+                            </p>
+                            <ul className="list-disc list-inside text-sm text-gray-600 mt-2 space-y-1">
+                                <li>All {data.projects.length} Projects</li>
+                                <li>All Judge Assignments</li>
+                                <li>All Submitted Scores</li>
+                                <li>All Reports</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div className="flex justify-end gap-3">
+                        <button 
+                            type="button"
+                            onClick={() => setShowClearConfirm(false)}
+                            className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md font-medium transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button 
+                            type="button"
+                            onClick={confirmClearAll}
+                            className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded-md font-bold shadow-sm transition-colors flex items-center gap-2"
+                        >
+                            <Trash2 size={16} /> Yes, Delete All
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Assignment Section */}
+      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+              <div>
+                  <h2 className="text-xl font-bold text-indigo-700 flex items-center gap-2">
+                      <Zap size={20}/> Auto-Assign Judges
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                      Distribute projects to judges.
+                  </p>
+              </div>
+              <div className="flex items-center gap-4 bg-gray-50 p-2 rounded border border-gray-100">
+                  <div className="flex items-center gap-2">
+                      <label className="text-sm font-bold text-gray-700">Rounds per Project:</label>
+                      <input 
+                          type="number" 
+                          min="1" 
+                          max="10" 
+                          className="w-16 border p-1 rounded text-center"
+                          value={assignRounds}
+                          onChange={(e) => setAssignRounds(parseInt(e.target.value) || 1)}
+                      />
+                  </div>
+                  <div className="h-6 w-px bg-gray-300"></div>
+                  <button 
+                    type="button"
+                    onClick={generateAssignments}
+                    className="bg-indigo-600 text-white px-4 py-2 rounded text-sm font-bold shadow hover:bg-indigo-700 flex items-center gap-2"
+                  >
+                      <Shuffle size={16} /> Generate
+                  </button>
+                  {data.assignments && data.assignments.length > 0 && (
+                      <button 
+                        type="button"
+                        onClick={clearAssignments}
+                        className="text-red-500 hover:bg-red-50 px-3 py-2 rounded text-sm font-medium transition-colors"
+                      >
+                          Clear
+                      </button>
+                  )}
+              </div>
+          </div>
+          
+          {data.assignments && data.assignments.length > 0 && (
+              <div className="bg-green-50 text-green-800 p-3 rounded text-sm border border-green-200 flex items-center gap-2">
+                  <Info size={16}/>
+                  <span>
+                      <strong>Assignments Active:</strong> {data.assignments.length} total assignments generated. 
+                      Go to the <strong>Judge Portal</strong> to see them in action.
+                  </span>
+              </div>
+          )}
+      </div>
+
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
             <div>
@@ -297,28 +518,40 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
                     className="hidden" 
                 />
                 <button 
+                    type="button"
                     onClick={() => fileInputRef.current?.click()}
                     className="text-sm bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-2 rounded flex items-center gap-2 font-medium transition-colors"
                 >
                     <FileSpreadsheet size={16}/> Upload CSV
                 </button>
                 <button 
+                    type="button"
                     onClick={generateDemoProjects}
                     className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-600 border border-gray-200 px-3 py-2 rounded flex items-center gap-2 transition-colors"
                 >
                     <Upload size={16}/> Load Demo Data
                 </button>
+                {data.projects.length > 0 && (
+                    <button 
+                        type="button"
+                        onClick={() => setShowClearConfirm(true)}
+                        className="text-sm bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-3 py-2 rounded flex items-center gap-2 font-medium transition-colors"
+                        title="Delete All Projects"
+                    >
+                        <Trash2 size={16}/> Clear All
+                    </button>
+                )}
             </div>
         </div>
 
-        {/* CSV Format Info */}
         <div className="bg-blue-50 p-3 rounded-md border border-blue-100 flex gap-3 text-sm text-blue-800 mb-6">
             <Info className="shrink-0 w-5 h-5 mt-0.5 text-blue-600" />
             <div>
                 <p className="font-semibold mb-1">CSV Import Guide:</p>
                 <ul className="list-disc list-inside space-y-1 ml-1 text-xs sm:text-sm">
                     <li><strong>Devpost Export:</strong> Supports "Project Title", "Opt-In Prizes", "Submitter Email", "Team Members".</li>
-                    <li><strong>Duplicate Names:</strong> Projects with the same name are distinguished by "Submitter Email" during import.</li>
+                    <li><strong>Duplicate Names:</strong> Projects are distinguished by combining "Project Name" and "Submitter Email".</li>
+                    <li><strong>Categories:</strong> New categories found in "Opt-In Prizes" or "Track" columns will be automatically added to Sponsor Categories.</li>
                 </ul>
             </div>
         </div>
@@ -358,7 +591,7 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
               value={newProject.teamMembersStr || ''}
               onChange={e => setNewProject({...newProject, teamMembersStr: e.target.value})}
             />
-            <button onClick={addProject} className="bg-indigo-600 text-white p-2 rounded flex items-center justify-center min-w-[3rem]">
+            <button type="button" onClick={addProject} className="bg-indigo-600 text-white p-2 rounded flex items-center justify-center min-w-[3rem]">
               <Plus size={20} />
             </button>
           </div>
@@ -433,6 +666,7 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
                                  <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 text-xs rounded-full group">
                                      {c}
                                      <button
+                                        type="button"
                                         onClick={() => {
                                             const newCats = p.categories.filter((_, idx) => idx !== i);
                                             updateProjectField(p.id, 'categories', newCats);
@@ -466,7 +700,7 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
                          </select>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button onClick={() => removeProject(p.id)} className="text-red-500 hover:text-red-700">
+                        <button type="button" onClick={() => removeProject(p.id)} className="text-red-500 hover:text-red-700">
                             <Trash2 size={16} />
                         </button>
                       </td>

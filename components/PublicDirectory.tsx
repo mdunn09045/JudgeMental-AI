@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { HackathonData } from '../types';
-import { Search, Filter, MapPin, LogOut, Users } from 'lucide-react';
+import { Search, Filter, MapPin, LogOut, Users, Map } from 'lucide-react';
 
 interface Props {
   data: HackathonData;
@@ -10,6 +10,7 @@ interface Props {
 export const PublicDirectory: React.FC<Props> = ({ data, onExit }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [showMaps, setShowMaps] = useState(false);
 
   // Extract all unique categories from projects + organizer/sponsor lists to ensure filter list is complete
   const allCategories = useMemo(() => {
@@ -73,6 +74,29 @@ export const PublicDirectory: React.FC<Props> = ({ data, onExit }) => {
                 />
             </div>
         </div>
+
+        {/* Map Toggle (If Maps Exist) */}
+        {data.tableMapImages && data.tableMapImages.length > 0 && (
+            <div className="px-4 mb-6 max-w-6xl mx-auto">
+                <button 
+                    onClick={() => setShowMaps(!showMaps)}
+                    className="w-full bg-white border border-indigo-200 text-indigo-700 p-3 rounded-lg flex items-center justify-center gap-2 font-bold hover:bg-indigo-50 transition-colors shadow-sm"
+                >
+                    <Map size={20} /> 
+                    {showMaps ? 'Hide Venue Maps' : 'View Venue Maps & Table Layout'}
+                </button>
+                
+                {showMaps && (
+                    <div className="mt-4 space-y-4 animate-fade-in">
+                        {data.tableMapImages.map((img, idx) => (
+                            <div key={idx} className="border rounded-lg overflow-hidden shadow-sm bg-gray-100">
+                                <img src={img} alt={`Venue Map ${idx + 1}`} className="w-full h-auto" />
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        )}
 
         {/* Category Filters */}
         <div className="px-4 mb-6 max-w-6xl mx-auto">

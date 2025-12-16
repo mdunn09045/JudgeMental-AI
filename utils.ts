@@ -155,8 +155,8 @@ export interface ProjectScoreStats {
   projectName: string;
   table: string;
   timesJudged: number;
-  avgScore: number;
-  totalScore: number;
+  rankPoints: number; // Stack ranking points
+  rawAvg: number;     // Secondary tie-breaker
 }
 
 export const calculateLeaderboard = (
@@ -175,13 +175,11 @@ export const calculateLeaderboard = (
     
     if (!filterCategory) {
       // OVERALL VIEW: Exclude all category-specific criteria
-      // This ensures overall ranking is based purely on general criteria
       if (!isCategoryCriterion) {
         includedCriteriaIds.add(c.id);
       }
     } else {
       // CATEGORY VIEW: Include General Criteria AND the specific category criterion
-      // Exclude other category criteria that are irrelevant to this view
       if (!isCategoryCriterion || c.name === filterCategory) {
         includedCriteriaIds.add(c.id);
       }
@@ -194,31 +192,89 @@ export const calculateLeaderboard = (
     relevantProjects = relevantProjects.filter(p => p.categories.includes(filterCategory));
   }
 
-  return relevantProjects.map(p => {
-    const projectScores = scores.filter(s => s.projectId === p.id);
-    if (projectScores.length === 0) {
-      return { projectId: p.id, projectName: p.name, table: p.table, timesJudged: 0, avgScore: 0, totalScore: 0 };
-    }
+  // 3. Group Scores by Judge to perform Stack Ranking
+  const judgeScores: Record<string, { projectId: string, rawScore: number }[]> = {};
 
-    let totalPoints = 0;
-    projectScores.forEach(s => {
-      // Sum only the allowed criteria
+  scores.forEach(s => {
+      // Filter out scores for projects that aren't relevant (e.g. no-shows or not in category)
+      if (!relevantProjects.some(p => p.id === s.projectId)) return;
+
+      let rawTotal = 0;
       Object.entries(s.criteria).forEach(([cId, scoreVal]) => {
         if (includedCriteriaIds.has(cId)) {
           const criterion = criteria.find(c => c.id === cId);
           const weight = criterion?.weight ?? 1;
-          totalPoints += scoreVal * weight;
+          rawTotal += scoreVal * weight;
         }
       });
-    });
+
+      if (!judgeScores[s.judgeId]) judgeScores[s.judgeId] = [];
+      judgeScores[s.judgeId].push({ projectId: s.projectId, rawScore: rawTotal });
+  });
+
+  // 4. Calculate Ranking Points per Judge
+  const projectPoints: Record<string, number> = {};
+  const projectRawTotals: Record<string, number> = {};
+  const projectJudgeCounts: Record<string, number> = {};
+
+  // Initialize
+  relevantProjects.forEach(p => {
+      projectPoints[p.id] = 0;
+      projectRawTotals[p.id] = 0;
+      projectJudgeCounts[p.id] = 0;
+  });
+
+  Object.values(judgeScores).forEach(jScores => {
+      // Sort descending by raw score
+      jScores.sort((a, b) => b.rawScore - a.rawScore);
+
+      // Assign points based on rank
+      // Standard Competition Ranking (1224): 
+      // 1st (5pts), 2nd (4pts), 3rd (3pts), 4th (2pts), 5th (1pt)
+      // Ties get the points for their rank index.
+      
+      for (let i = 0; i < jScores.length; i++) {
+          const item = jScores[i];
+          
+          // Track raw stats for secondary data
+          projectRawTotals[item.projectId] += item.rawScore;
+          projectJudgeCounts[item.projectId] += 1;
+
+          // Determine Rank
+          // Rank is (Index of first item with this score) + 1
+          const firstIndex = jScores.findIndex(s => s.rawScore === item.rawScore);
+          const rank = firstIndex + 1;
+
+          let points = 0;
+          if (rank === 1) points = 5;
+          else if (rank === 2) points = 4;
+          else if (rank === 3) points = 3;
+          else if (rank === 4) points = 2;
+          else if (rank === 5) points = 1;
+
+          if (points > 0) {
+              projectPoints[item.projectId] += points;
+          }
+      }
+  });
+
+  // 5. Construct Result
+  return relevantProjects.map(p => {
+    const timesJudged = projectJudgeCounts[p.id] || 0;
+    const rawTotal = projectRawTotals[p.id] || 0;
     
     return {
       projectId: p.id,
       projectName: p.name,
       table: p.table,
-      timesJudged: projectScores.length,
-      totalScore: totalPoints,
-      avgScore: totalPoints / projectScores.length
+      timesJudged: timesJudged,
+      rankPoints: projectPoints[p.id] || 0,
+      rawAvg: timesJudged > 0 ? rawTotal / timesJudged : 0
     };
-  }).sort((a, b) => b.avgScore - a.avgScore);
+  }).sort((a, b) => {
+      // Primary Sort: Rank Points
+      if (b.rankPoints !== a.rankPoints) return b.rankPoints - a.rankPoints;
+      // Secondary Sort: Raw Average (Tie Breaker)
+      return b.rawAvg - a.rawAvg;
+  });
 };

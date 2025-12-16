@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { HackathonData, Judge, Project, Score } from '../types';
-import { Check, Search, AlertCircle, ChevronRight, CheckCircle2, Users } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { HackathonData, Judge, Project, Score, ReportType } from '../types';
+import { Check, Search, AlertCircle, ChevronRight, CheckCircle2, Users, Star, ArrowRight, Flag, Clock } from 'lucide-react';
 
 interface Props {
   data: HackathonData;
@@ -32,6 +32,45 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
       if (!activeJudge) return undefined;
       return data.scores.find(s => s.judgeId === activeJudge.id && s.projectId === projectId);
   };
+
+  // Helper: Get existing report
+  const getExistingReport = (projectId: string) => {
+      if (!activeJudge) return undefined;
+      // Get the latest pending report
+      return data.reports.find(r => 
+          r.judgeId === activeJudge.id && 
+          r.projectId === projectId && 
+          r.status === 'pending'
+      );
+  };
+
+  // Filter projects for the active judge
+  const judgeProjects = useMemo(() => {
+    if (!activeJudge) return [];
+    
+    // If assignments exist, filter by assignment
+    if (data.assignments && data.assignments.length > 0) {
+        const assignedIds = data.assignments
+            .filter(a => a.judgeId === activeJudge.id)
+            .map(a => a.projectId);
+        
+        return data.projects.filter(p => assignedIds.includes(p.id) && !p.noShow);
+    }
+    
+    // Fallback if no assignments: Show all non-noShow projects
+    return data.projects.filter(p => !p.noShow);
+  }, [activeJudge, data.assignments, data.projects]);
+
+  // "Up Next" Feature: Pick a random pending project to suggest
+  const nextProject = useMemo(() => {
+    if (!activeJudge) return null;
+    const pending = judgeProjects.filter(p => !getExistingScore(p.id));
+    if (pending.length === 0) return null;
+    // Pick random from pending to prevent table 1 bottleneck
+    const randomIndex = Math.floor(Math.random() * pending.length);
+    return pending[randomIndex];
+  }, [judgeProjects, activeJudge, data.scores]);
+
 
   // Reset scores or load existing when selecting a project
   const handleProjectSelect = (p: Project) => {
@@ -81,18 +120,54 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
     setSelectedProject(null); // Return to list
   };
 
+  const reportIssue = (type: ReportType) => {
+      if (!activeJudge || !selectedProject) return;
+
+      // Toggle off if already reported same type
+      const existing = getExistingReport(selectedProject.id);
+      
+      let newReports = [...data.reports];
+
+      if (existing) {
+          // If clicking same type, remove it (toggle off)
+          // If clicking different type, update it
+          if (existing.type === type) {
+              newReports = newReports.filter(r => r.id !== existing.id);
+          } else {
+              newReports = newReports.map(r => r.id === existing.id ? { ...r, type, timestamp: new Date().toISOString() } : r);
+          }
+      } else {
+          newReports.push({
+              id: `rep-${Date.now()}`,
+              judgeId: activeJudge.id,
+              projectId: selectedProject.id,
+              type: type,
+              status: 'pending',
+              timestamp: new Date().toISOString()
+          });
+      }
+
+      onChange({
+          ...data,
+          reports: newReports
+      });
+  };
+
   const handleScoreChange = (criteriaId: string, val: number) => {
     setScores(prev => ({ ...prev, [criteriaId]: val }));
   };
 
-  // Filter projects (search by name or table) and exclude No Shows
-  const filteredProjects = data.projects.filter(p => 
-    !p.noShow && // Check for No Show
-    (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.table.includes(searchTerm))
-  );
-
-  // We no longer filter out judged projects from the list, we just mark them.
+  // Display List: Sorted by Table Number usually
+  const displayList = judgeProjects.filter(p => 
+    p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    p.table.includes(searchTerm)
+  ).sort((a, b) => {
+      // Sort numeric if possible
+      const tA = parseInt(a.table);
+      const tB = parseInt(b.table);
+      if (!isNaN(tA) && !isNaN(tB)) return tA - tB;
+      return a.table.localeCompare(b.table);
+  });
 
   if (!activeJudge) {
     return (
@@ -119,6 +194,7 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
   if (selectedProject) {
     const relevantCriteria = getRelevantCriteria(selectedProject);
     const isEditing = !!getExistingScore(selectedProject.id);
+    const currentReport = getExistingReport(selectedProject.id);
 
     return (
       <div className="bg-white min-h-screen pb-20 animate-fade-in">
@@ -145,6 +221,29 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
                     ))}
                 </div>
                 {selectedProject.description && <p className="mt-2 text-sm text-gray-700">{selectedProject.description}</p>}
+                
+                {/* Reporting Options */}
+                <div className="mt-4 pt-3 border-t border-indigo-200">
+                    <button 
+                        onClick={() => reportIssue('no-show')}
+                        className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors border ${
+                            currentReport?.type === 'no-show' 
+                            ? 'bg-red-100 text-red-700 border-red-300' 
+                            : 'bg-white text-gray-600 border-gray-300 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
+                        }`}
+                    >
+                        <Flag size={16} /> 
+                        {currentReport?.type === 'no-show' ? 'Reported No Show' : 'Report No Show'}
+                    </button>
+                    <p className="text-xs text-gray-500 mt-2 text-center italic">
+                        If the team is temporarily busy or presenting to another judge, <span className="font-bold text-gray-600">do not</span> report as "No Show". Just come back later.
+                    </p>
+                </div>
+                {currentReport && (
+                    <p className="text-xs text-green-600 mt-2 text-center italic font-bold">
+                        Organizers have been notified of this status. You can proceed to score or judge another project.
+                    </p>
+                )}
             </div>
 
             <div className="space-y-6">
@@ -202,7 +301,9 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
          <div className="flex justify-between items-center mb-4">
              <div>
                 <h1 className="text-2xl font-bold">Hello, {activeJudge.name}</h1>
-                <p className="text-indigo-200 text-sm">Select a project to judge.</p>
+                <p className="text-indigo-200 text-sm">
+                    {data.assignments?.length ? 'You have assigned tables below.' : 'Select a project to judge.'}
+                </p>
              </div>
              <button onClick={() => setActiveJudge(null)} className="text-xs bg-indigo-800 hover:bg-indigo-700 px-3 py-1.5 rounded transition-colors border border-indigo-600">Switch User</button>
          </div>
@@ -217,15 +318,34 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
          </div>
       </div>
 
-      <div className="px-4 space-y-3 max-w-2xl mx-auto">
-        {filteredProjects.length === 0 && (
+      <div className="px-4 space-y-4 max-w-2xl mx-auto">
+        
+        {/* Suggested Next Project Card */}
+        {!searchTerm && nextProject && (
+            <div 
+                onClick={() => handleProjectSelect(nextProject)}
+                className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg p-4 text-white shadow-md cursor-pointer hover:scale-[1.02] transition-transform mb-6"
+            >
+                <div className="flex justify-between items-start mb-2">
+                    <span className="bg-white/20 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
+                        <Star size={12} fill="white" /> Suggested Start
+                    </span>
+                    <ArrowRight className="opacity-70" size={20} />
+                </div>
+                <h3 className="text-xl font-bold mb-1">{nextProject.name}</h3>
+                <div className="text-indigo-100 font-mono text-lg">Table {nextProject.table}</div>
+                <p className="text-xs opacity-80 mt-2">To prevent overcrowding, please head here next!</p>
+            </div>
+        )}
+
+        {displayList.length === 0 && (
             <div className="text-center py-10 text-gray-500">
                 <AlertCircle className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                <p>No projects found matching your search.</p>
+                <p>No projects found.</p>
             </div>
         )}
         
-        {filteredProjects.map(p => {
+        {displayList.map(p => {
             const isJudged = !!getExistingScore(p.id);
             return (
                 <div 
@@ -264,7 +384,7 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
         })}
       </div>
       
-      {filteredProjects.some(p => !!getExistingScore(p.id)) && (
+      {displayList.some(p => !!getExistingScore(p.id)) && (
           <div className="text-center mt-6 text-xs text-gray-400">
               <p>Green shaded projects have been scored. Click to edit.</p>
           </div>

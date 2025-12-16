@@ -79,6 +79,7 @@ const App: React.FC = () => {
         // Ensure arrays are arrays (legacy check)
         merged.projects = Array.isArray(merged.projects) ? merged.projects : [];
         merged.scores = Array.isArray(merged.scores) ? merged.scores : [];
+        merged.reports = Array.isArray(merged.reports) ? merged.reports : [];
         setData(merged);
       } catch (e) {
         console.error("Failed to load saved data");
@@ -332,7 +333,7 @@ const App: React.FC = () => {
         }
         
         {(currentView === View.DASHBOARD && userRole === 'ADMIN') && 
-            <LiveDashboard data={data} />
+            <LiveDashboard data={data} onChange={setData} />
         }
 
         {currentView === View.PUBLIC_DIRECTORY && (

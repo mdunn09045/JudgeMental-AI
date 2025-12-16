@@ -1,3 +1,4 @@
+
 export enum OrganizerRoleType {
   DEVPOST = "Devpost Help",
   CLEARING = "Clearing Tables",
@@ -48,6 +49,24 @@ export interface Score {
   timestamp: string;
 }
 
+export interface Assignment {
+  id: string;
+  judgeId: string;
+  projectId: string;
+  status: 'pending' | 'completed';
+}
+
+export type ReportType = 'no-show' | 'busy';
+
+export interface JudgeReport {
+  id: string;
+  judgeId: string;
+  projectId: string;
+  type: ReportType;
+  timestamp: string;
+  status: 'pending' | 'verified' | 'dismissed';
+}
+
 export interface HackathonData {
   eventName: string;
   estimatedCheckIns: number;
@@ -86,6 +105,11 @@ export interface HackathonData {
   // Phase 3: Operations
   projects: Project[];
   scores: Score[];
+  assignments: Assignment[];
+  reports: JudgeReport[];
+  
+  // Logistics
+  tableMapImages: string[];
 }
 
 export interface StressTestResult {
@@ -149,4 +173,7 @@ export const INITIAL_DATA: HackathonData = {
   actualJudgesShowed: null,
   projects: [],
   scores: [],
+  assignments: [],
+  reports: [],
+  tableMapImages: [],
 };
