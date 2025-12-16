@@ -1,6 +1,6 @@
 import React from 'react';
 import { HackathonData } from '../types';
-import { Clock, Calculator } from 'lucide-react';
+import { Clock, Calculator, AlertCircle } from 'lucide-react';
 
 interface Props {
   data: HackathonData;
@@ -49,6 +49,9 @@ export const GameTimePhase: React.FC<Props> = ({ data, onChange }) => {
             onChange={e => onChange({...data, demoTimeMinutes: parseInt(e.target.value)})}
             placeholder="e.g. 5"
             />
+            <p className="text-xs text-orange-600 mt-1 flex items-center gap-1 font-medium">
+                <AlertCircle size={10} /> Add +2 mins for travel!
+            </p>
         </div>
 
         <div>
@@ -72,9 +75,14 @@ export const GameTimePhase: React.FC<Props> = ({ data, onChange }) => {
                 <h4 className="font-bold text-indigo-900">Estimated Total Time</h4>
                 <p className="text-sm text-indigo-700">Assuming <span className="font-bold">3 rounds</span> per project.</p>
                 {estimatedMinutes > 0 && (
+                    <>
                      <div className="text-xs text-indigo-400 mt-1 font-mono">
                         ({projects} projs × 3 × {demoTime}m) / {judges} judges
                      </div>
+                     <p className="text-[10px] text-indigo-500 mt-2 italic flex items-center gap-1">
+                        * Note: This assumes absolute efficiency (0 delays). Real world time may be longer.
+                     </p>
+                    </>
                 )}
             </div>
         </div>

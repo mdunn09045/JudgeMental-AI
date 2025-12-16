@@ -143,9 +143,9 @@ const DEFAULT_JUDGES: Judge[] = Array.from({ length: 15 }, (_, i) => ({
   phone: '1234567890',
 }));
 
-// Pre-populate organizers with one entry per role, default name = role name, phone = 1234567890
-const DEFAULT_ORGANIZERS: Organizer[] = Object.values(OrganizerRoleType).map(role => ({
-  name: role,
+// Pre-populate organizers with one entry per role, default name = "Organizer X", phone = 1234567890
+const DEFAULT_ORGANIZERS: Organizer[] = Object.values(OrganizerRoleType).map((role, i) => ({
+  name: `Organizer ${i + 1}`,
   phone: '1234567890',
   email: '',
   role: role

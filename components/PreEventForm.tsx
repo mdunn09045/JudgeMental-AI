@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { HackathonData, Organizer, OrganizerRoleType, Judge, DEFAULT_CRITERIA, Criterion } from '../types';
-import { Plus, Trash2, HelpCircle, AlertTriangle, Edit2, X, Save, Download, Upload, Gavel, Tag, Image as ImageIcon, Key } from 'lucide-react';
+import { Plus, Trash2, HelpCircle, AlertTriangle, Edit2, X, Save, Download, Upload, Gavel, Tag, Image as ImageIcon, Key, Loader2 } from 'lucide-react';
 
 interface Props {
   data: HackathonData;
@@ -22,6 +22,7 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
   const [editingJudgeId, setEditingJudgeId] = useState<string | null>(null);
   const [newOrgCat, setNewOrgCat] = useState('');
   const [newSponsorCat, setNewSponsorCat] = useState('');
+  const [isRestoring, setIsRestoring] = useState(false);
   
   const updateField = (field: keyof HackathonData, value: any) => {
     onChange({ ...data, [field]: value });
@@ -34,7 +35,19 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `judgeplan-${data.eventName ? data.eventName.replace(/\s+/g, '-').toLowerCase() : 'backup'}-${new Date().toISOString().split('T')[0]}.json`;
+    
+    // Generate filename: EventName_YYYY-MM-DD_HH-MM.json
+    const now = new Date();
+    const pad = (n: number) => n < 10 ? '0' + n : n;
+    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const timeStr = `${pad(now.getHours())}-${pad(now.getMinutes())}`;
+    
+    const cleanEventName = data.eventName 
+      ? data.eventName.replace(/[^a-z0-9]/gi, '_') 
+      : 'JudgePlan_Export';
+
+    link.download = `${cleanEventName}_${dateStr}_${timeStr}.json`;
+    
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -43,34 +56,64 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      
-      const reader = new FileReader();
-      reader.onload = (event) => {
-          try {
-              const text = event.target?.result as string;
-              if (!text) return;
-              
-              const parsed = JSON.parse(text);
-              // Basic structure check: must have judges array or projects array to be valid
-              if (parsed && typeof parsed === 'object' && (Array.isArray(parsed.judges) || Array.isArray(parsed.projects))) {
-                  // Use setTimeout to ensure the file input UI event clears before blocking with confirm
-                  setTimeout(() => {
-                    if (window.confirm(`Restore data from "${file.name}"? This will overwrite ALL current data.`)) {
-                        onChange(parsed);
-                        alert("Data restored successfully.");
-                    }
-                  }, 50);
-              } else {
-                  alert("Invalid file format. Please upload a valid JudgePlan JSON export.");
-              }
-          } catch (err) {
-              console.error(err);
-              alert("Error parsing file.");
+
+      // Keep reference to input to reset it later
+      const inputElement = e.target;
+
+      // Use setTimeout to decouple the alert from the file picker event loop
+      // This ensures the browser has time to close the file picker before showing the confirm dialog
+      setTimeout(() => {
+          const confirmed = window.confirm(
+              `File detected: "${file.name}".\n\nAre you sure you want to RESTORE data from this backup? This will overwrite all current event data.`
+          );
+
+          if (!confirmed) {
+              inputElement.value = ''; // Reset input so user can re-select same file if they cancel then change mind
+              return;
           }
-      };
-      reader.readAsText(file);
-      // Reset input so the same file can be selected again if needed
-      e.target.value = '';
+          
+          setIsRestoring(true);
+
+          const reader = new FileReader();
+          reader.onload = (event) => {
+              setIsRestoring(false);
+              try {
+                  const text = event.target?.result as string;
+                  if (!text) throw new Error("File is empty");
+                  
+                  const parsed = JSON.parse(text);
+                  
+                  // Validation: Check for key arrays to ensure it's a valid backup
+                  const isValidBackup = parsed && typeof parsed === 'object' && 
+                    (Array.isArray(parsed.judges) || Array.isArray(parsed.projects) || Array.isArray(parsed.organizers));
+
+                  if (isValidBackup) {
+                      // CRITICAL FIX: Ensure the restored data uses the current event ID
+                      const restoredData = { ...parsed, id: data.id };
+                      onChange(restoredData);
+                      
+                      setTimeout(() => {
+                          alert("✅ Success! Data restored successfully.");
+                      }, 100);
+                  } else {
+                      alert("❌ Invalid File Format.\n\nThe uploaded file does not look like a valid JudgePlan export (missing required arrays).");
+                  }
+              } catch (err) {
+                  console.error(err);
+                  alert("❌ Error Parsing File.\n\nPlease ensure the file is valid JSON.");
+              }
+          };
+          
+          reader.onerror = () => {
+              setIsRestoring(false);
+              alert("❌ Error reading file from disk.");
+          }
+
+          reader.readAsText(file);
+          
+          // Reset input value at the end of the process start
+          inputElement.value = '';
+      }, 100);
   };
 
 
@@ -267,19 +310,21 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
                    <button 
                       type="button"
                       onClick={handleExport}
+                      disabled={isRestoring}
                       className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded font-medium transition-colors shadow-sm whitespace-nowrap"
                    >
                        <Download size={18}/> Export Data
                    </button>
                    
-                   <label className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded font-medium transition-colors shadow-sm cursor-pointer whitespace-nowrap">
-                       <Upload size={18}/> 
-                       <span>Restore Data</span>
+                   <label className={`flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded font-medium transition-colors shadow-sm cursor-pointer whitespace-nowrap ${isRestoring ? 'opacity-50 pointer-events-none' : ''}`}>
+                       {isRestoring ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18}/>}
+                       <span>{isRestoring ? 'Processing...' : 'Restore Data'}</span>
                        <input 
                           type="file" 
                           className="hidden" 
                           onChange={handleImport} 
                           accept=".json" 
+                          disabled={isRestoring}
                        />
                    </label>
               </div>

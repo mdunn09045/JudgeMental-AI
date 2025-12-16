@@ -93,16 +93,14 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange, currentUser, user
   // Reset scores or load existing when selecting a project
   const handleProjectSelect = (p: Project) => {
     setSelectedProject(p);
-    const relevant = getRelevantCriteria(p);
     const existing = getExistingScore(p.id);
 
     if (existing) {
         setScores(existing.criteria);
         setNote(existing.note);
     } else {
-        const initialScores: Record<string, number> = {};
-        relevant.forEach(c => initialScores[c.id] = 1);
-        setScores(initialScores);
+        // Default to blank (empty object) so judges must explicitly select scores
+        setScores({});
         setNote('');
     }
   };
@@ -110,6 +108,15 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange, currentUser, user
   const submitScore = () => {
     if (!activeJudge || !selectedProject) return;
     
+    // Validate that all relevant criteria are selected
+    const relevant = getRelevantCriteria(selectedProject);
+    const missing = relevant.some(c => scores[c.id] === undefined);
+    
+    if (missing) {
+        alert("Please ensure all criteria have a score selected before submitting.");
+        return;
+    }
+
     const existing = getExistingScore(selectedProject.id);
 
     const newScore: Score = {
@@ -281,7 +288,7 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange, currentUser, user
                     </button>
                 </div>
                 <p className="text-xs text-gray-500 mt-2 text-center italic">
-                    Use <span className="font-bold">No Show</span> if team is missing. Use <span className="font-bold text-red-500">Cheating</span> to flag suspicious activity. If a team is missing, just come back to them later. 
+                    Use <span className="font-bold">No Show</span> if team is missing. Use <span className="font-bold text-red-500">Cheating</span> to flag suspicious activity.
                 </p>
                 {currentReport && (
                     <p className="text-xs text-green-600 mt-2 text-center italic font-bold">
