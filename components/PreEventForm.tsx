@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { HackathonData, Organizer, OrganizerRoleType, Judge, DEFAULT_CRITERIA, Criterion } from '../types';
-import { Plus, Trash2, HelpCircle, AlertTriangle, Edit2, X, Save, Download, Upload, Gavel, Tag, Image as ImageIcon, Key, Loader2 } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { HackathonData, Organizer, OrganizerRoleType, Judge, DEFAULT_CRITERIA, Criterion, INITIAL_DATA } from '../types';
+import { Plus, Trash2, HelpCircle, AlertTriangle, Edit2, X, Save, Download, Upload, Gavel, Tag, Image as ImageIcon, Key, Loader2, CheckCircle } from 'lucide-react';
 
 interface Props {
   data: HackathonData;
@@ -22,7 +22,10 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
   const [editingJudgeId, setEditingJudgeId] = useState<string | null>(null);
   const [newOrgCat, setNewOrgCat] = useState('');
   const [newSponsorCat, setNewSponsorCat] = useState('');
-  const [isRestoring, setIsRestoring] = useState(false);
+  const [showRestoreSuccess, setShowRestoreSuccess] = useState(false);
+  
+  // Ref for hidden file input
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const updateField = (field: keyof HackathonData, value: any) => {
     onChange({ ...data, [field]: value });
@@ -53,67 +56,88 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
     document.body.removeChild(link);
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleRestoreBtnClick = () => {
+    // Trigger hidden input
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
 
-      // Keep reference to input to reset it later
-      const inputElement = e.target;
+      // Confirm overwrite before processing
+      if (!window.confirm(`Are you sure you want to RESTORE data from "${file.name}"?\n\nThis will completely overwrite the current event configuration, judges, projects, and scores.`)) {
+         if (fileInputRef.current) fileInputRef.current.value = '';
+         return;
+      }
 
-      // Use setTimeout to decouple the alert from the file picker event loop
-      // This ensures the browser has time to close the file picker before showing the confirm dialog
-      setTimeout(() => {
-          const confirmed = window.confirm(
-              `File detected: "${file.name}".\n\nAre you sure you want to RESTORE data from this backup? This will overwrite all current event data.`
-          );
-
-          if (!confirmed) {
-              inputElement.value = ''; // Reset input so user can re-select same file if they cancel then change mind
-              return;
-          }
-          
-          setIsRestoring(true);
-
-          const reader = new FileReader();
-          reader.onload = (event) => {
-              setIsRestoring(false);
-              try {
-                  const text = event.target?.result as string;
-                  if (!text) throw new Error("File is empty");
-                  
-                  const parsed = JSON.parse(text);
-                  
-                  // Validation: Check for key arrays to ensure it's a valid backup
-                  const isValidBackup = parsed && typeof parsed === 'object' && 
-                    (Array.isArray(parsed.judges) || Array.isArray(parsed.projects) || Array.isArray(parsed.organizers));
-
-                  if (isValidBackup) {
-                      // CRITICAL FIX: Ensure the restored data uses the current event ID
-                      const restoredData = { ...parsed, id: data.id };
-                      onChange(restoredData);
-                      
-                      setTimeout(() => {
-                          alert("✅ Success! Data restored successfully.");
-                      }, 100);
-                  } else {
-                      alert("❌ Invalid File Format.\n\nThe uploaded file does not look like a valid JudgePlan export (missing required arrays).");
+      const reader = new FileReader();
+      
+      reader.onload = (event) => {
+          try {
+              const text = event.target?.result as string;
+              if (!text) throw new Error("File is empty");
+              
+              const json = JSON.parse(text);
+              
+              // Handle "Stress Test Report" export format which wraps data in { data: ..., result: ... }
+              // If the user exported via the Stress Test Report, the actual data is inside .data
+              let importedData = json;
+              if (json.data && typeof json.data === 'object' && !Array.isArray(json.data)) {
+                  // If it has a nested data object with judges/projects, use that
+                  if (Array.isArray(json.data.judges) || Array.isArray(json.data.projects)) {
+                      importedData = json.data;
                   }
-              } catch (err) {
-                  console.error(err);
-                  alert("❌ Error Parsing File.\n\nPlease ensure the file is valid JSON.");
               }
-          };
-          
-          reader.onerror = () => {
-              setIsRestoring(false);
-              alert("❌ Error reading file from disk.");
-          }
 
-          reader.readAsText(file);
-          
-          // Reset input value at the end of the process start
-          inputElement.value = '';
-      }, 100);
+              // Basic validation
+              if (!importedData || typeof importedData !== 'object') {
+                   throw new Error("Invalid JSON structure.");
+              }
+
+              // 1. Deep Merge Strategy
+              // Start with a fresh copy of INITIAL_DATA to ensure all schema fields exist.
+              // This prevents crashes if the backup file is from an older version.
+              const baseData = JSON.parse(JSON.stringify(INITIAL_DATA));
+
+              // 2. Construct New State
+              const restoredData: HackathonData = {
+                  ...baseData,        // Defaults
+                  ...importedData,    // Overwrite with file data
+                  id: data.id         // CRITICAL: Force ID to match current active event so App.tsx updates the correct slot
+              };
+              
+              // 3. Array Safety Checks (ensure arrays are never null/undefined)
+              restoredData.projects = Array.isArray(restoredData.projects) ? restoredData.projects : [];
+              restoredData.scores = Array.isArray(restoredData.scores) ? restoredData.scores : [];
+              restoredData.reports = Array.isArray(restoredData.reports) ? restoredData.reports : [];
+              restoredData.judges = Array.isArray(restoredData.judges) ? restoredData.judges : [];
+              restoredData.organizers = Array.isArray(restoredData.organizers) ? restoredData.organizers : [];
+              restoredData.assignments = Array.isArray(restoredData.assignments) ? restoredData.assignments : [];
+              restoredData.tableMapImages = Array.isArray(restoredData.tableMapImages) ? restoredData.tableMapImages : [];
+              restoredData.criteria = Array.isArray(restoredData.criteria) ? restoredData.criteria : DEFAULT_CRITERIA;
+
+              // 4. Update Application State
+              onChange(restoredData);
+              
+              // 5. Show Success Feedback
+              setShowRestoreSuccess(true);
+              setTimeout(() => setShowRestoreSuccess(false), 3000);
+          } catch (err) {
+              console.error(err);
+              alert(`❌ Failed to restore data.\n\n${err instanceof Error ? err.message : 'Unknown error'}`);
+          } finally {
+              // Reset input so the same file can be selected again if needed
+              if (fileInputRef.current) fileInputRef.current.value = '';
+          }
+      };
+      
+      reader.onerror = () => {
+          alert("❌ Error reading file from disk.");
+          if (fileInputRef.current) fileInputRef.current.value = '';
+      };
+      
+      reader.readAsText(file);
   };
 
 
@@ -293,8 +317,21 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
   };
 
   return (
-    <div className="space-y-8 pb-20">
+    <div className="space-y-8 pb-20 relative">
       
+      {/* Success Toast Popup */}
+      {showRestoreSuccess && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-4 rounded-xl shadow-2xl z-[100] flex items-center gap-3 animate-bounce">
+            <div className="bg-white rounded-full p-1">
+                <CheckCircle className="text-green-600 w-6 h-6" />
+            </div>
+            <div>
+                <h4 className="font-bold text-lg">Data Restored!</h4>
+                <p className="text-green-100 text-xs">Your event configuration has been updated.</p>
+            </div>
+        </div>
+      )}
+
       {/* 0. Data Management (Backup/Restore) */}
       <section className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 border-l-4 border-l-indigo-600 overflow-hidden">
           <div className="flex flex-wrap md:flex-nowrap justify-between items-center gap-4">
@@ -310,23 +347,25 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
                    <button 
                       type="button"
                       onClick={handleExport}
-                      disabled={isRestoring}
                       className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded font-medium transition-colors shadow-sm whitespace-nowrap"
                    >
                        <Download size={18}/> Export Data
                    </button>
                    
-                   <label className={`flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded font-medium transition-colors shadow-sm cursor-pointer whitespace-nowrap ${isRestoring ? 'opacity-50 pointer-events-none' : ''}`}>
-                       {isRestoring ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18}/>}
-                       <span>{isRestoring ? 'Processing...' : 'Restore Data'}</span>
+                   <button 
+                      type="button"
+                      onClick={handleRestoreBtnClick}
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded font-medium transition-colors shadow-sm whitespace-nowrap"
+                   >
+                       <Upload size={18}/> <span>Restore Data</span>
                        <input 
+                          ref={fileInputRef}
                           type="file" 
                           className="hidden" 
-                          onChange={handleImport} 
+                          onChange={handleFileSelect} 
                           accept=".json" 
-                          disabled={isRestoring}
-                       />
-                   </label>
+                        />
+                   </button>
               </div>
           </div>
       </section>

@@ -273,7 +273,7 @@ const App: React.FC = () => {
             <div className="text-center mb-10">
                 <div className="flex items-center justify-center gap-3 mb-4">
                     <LayoutDashboard className="w-12 h-12 text-indigo-600" />
-                    <h1 className="text-4xl font-black text-gray-900">JudgePlan Pro</h1>
+                    <h1 className="text-4xl font-black text-gray-900">JudgeMental AI</h1>
                 </div>
                 <p className="text-gray-500">Hackathon judging logistics, simplified.</p>
             </div>
@@ -551,7 +551,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2 font-bold text-xl text-indigo-700">
               <LayoutDashboard className="text-indigo-600"/>
               <span className="hidden sm:inline">
-                {activeEventData.eventName || 'JudgePlan Pro'}
+                {activeEventData.eventName || 'JudgeMental AI'}
               </span>
               {loggedInUser && <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded ml-2 hidden md:inline">Hi, {loggedInUser.name}</span>}
             </div>
@@ -710,7 +710,7 @@ const App: React.FC = () => {
       
       {showHeader && (
         <footer className="bg-gray-800 text-gray-400 py-6 text-center text-sm">
-          <p>© {new Date().getFullYear()} JudgePlan Pro.</p>
+          <p>© {new Date().getFullYear()} JudgeMental AI.</p>
         </footer>
       )}
     </div>
