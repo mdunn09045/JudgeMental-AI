@@ -1,18 +1,36 @@
-import React, { useState, useMemo } from 'react';
-import { HackathonData, Judge, Project, Score, ReportType } from '../types';
-import { Check, Search, AlertCircle, ChevronRight, CheckCircle2, Users, Star, ArrowRight, Flag, Clock } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { HackathonData, Judge, Project, Score, ReportType, UserRole } from '../types';
+import { Check, Search, AlertCircle, ChevronRight, CheckCircle2, Users, Star, ArrowRight, Flag, Clock, AlertTriangle } from 'lucide-react';
 
 interface Props {
   data: HackathonData;
   onChange: (data: HackathonData) => void;
+  currentUser?: { name: string; id?: string } | null;
+  userRole?: UserRole | null;
 }
 
-export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
-  const [activeJudge, setActiveJudge] = useState<Judge | null>(null);
+export const JudgePortal: React.FC<Props> = ({ data, onChange, currentUser, userRole }) => {
+  // Determine initial judge based on role
+  const getInitialJudge = () => {
+      if (userRole === 'JUDGE' && currentUser?.id) {
+          return data.judges.find(j => j.id === currentUser.id) || null;
+      }
+      return null;
+  };
+
+  const [activeJudge, setActiveJudge] = useState<Judge | null>(getInitialJudge);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [note, setNote] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Auto-set judge if role is JUDGE (safeguard against prop updates)
+  useEffect(() => {
+    if (userRole === 'JUDGE' && currentUser?.id) {
+        const j = data.judges.find(j => j.id === currentUser.id);
+        setActiveJudge(j || null);
+    }
+  }, [userRole, currentUser, data.judges]);
 
   // Helper to determine if a criterion should be shown for this project
   const getRelevantCriteria = (project: Project) => {
@@ -170,11 +188,26 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
   });
 
   if (!activeJudge) {
+    if (userRole === 'JUDGE') {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6 animate-fade-in">
+                <AlertCircle className="w-16 h-16 text-red-300 mb-4" />
+                <h2 className="text-xl font-bold text-gray-800">Account Error</h2>
+                <p className="text-gray-500 max-w-sm mt-2">
+                    We could not locate your judge profile in the active event data. Please contact an organizer.
+                </p>
+                <div className="mt-4 text-xs font-mono bg-gray-100 p-2 rounded">
+                    User ID: {currentUser?.id || 'Unknown'}
+                </div>
+            </div>
+        );
+    }
+
     return (
       <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-sm border border-gray-200 mt-10 animate-fade-in">
-        <h2 className="text-xl font-bold text-center mb-6">Welcome, Judge!</h2>
-        <p className="text-gray-600 mb-4 text-center">Please select your name to begin.</p>
-        <div className="space-y-2">
+        <h2 className="text-xl font-bold text-center mb-6">Select Judge Identity</h2>
+        <p className="text-gray-600 mb-4 text-center text-sm">You are in Admin mode. Select a judge to view their portal.</p>
+        <div className="space-y-2 max-h-96 overflow-y-auto">
           {data.judges.length === 0 && <p className="text-center text-red-500">No judges found. Please add judges in Pre-Event Planning.</p>}
           {data.judges.map(j => (
             <button 
@@ -223,25 +256,36 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
                 {selectedProject.description && <p className="mt-2 text-sm text-gray-700">{selectedProject.description}</p>}
                 
                 {/* Reporting Options */}
-                <div className="mt-4 pt-3 border-t border-indigo-200">
+                <div className="mt-4 pt-3 border-t border-indigo-200 flex gap-2">
                     <button 
                         onClick={() => reportIssue('no-show')}
-                        className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors border ${
+                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors border ${
                             currentReport?.type === 'no-show' 
-                            ? 'bg-red-100 text-red-700 border-red-300' 
-                            : 'bg-white text-gray-600 border-gray-300 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
+                            ? 'bg-gray-100 text-gray-700 border-gray-300' 
+                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
                         }`}
                     >
                         <Flag size={16} /> 
-                        {currentReport?.type === 'no-show' ? 'Reported No Show' : 'Report No Show'}
+                        {currentReport?.type === 'no-show' ? 'Reported No Show' : 'No Show'}
                     </button>
-                    <p className="text-xs text-gray-500 mt-2 text-center italic">
-                        If the team is temporarily busy or presenting to another judge, <span className="font-bold text-gray-600">do not</span> report as "No Show". Just come back later.
-                    </p>
+                    <button 
+                        onClick={() => reportIssue('cheating')}
+                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors border ${
+                            currentReport?.type === 'cheating' 
+                            ? 'bg-red-100 text-red-700 border-red-300' 
+                            : 'bg-white text-red-600 border-red-200 hover:bg-red-50'
+                        }`}
+                    >
+                        <AlertTriangle size={16} /> 
+                        {currentReport?.type === 'cheating' ? 'Reported Cheating' : 'Report Cheating'}
+                    </button>
                 </div>
+                <p className="text-xs text-gray-500 mt-2 text-center italic">
+                    Use <span className="font-bold">No Show</span> if team is missing. Use <span className="font-bold text-red-500">Cheating</span> to flag suspicious activity. If a team is missing, just come back to them later. 
+                </p>
                 {currentReport && (
                     <p className="text-xs text-green-600 mt-2 text-center italic font-bold">
-                        Organizers have been notified of this status. You can proceed to score or judge another project.
+                        Report submitted. Organizers have been notified.
                     </p>
                 )}
             </div>
@@ -305,7 +349,9 @@ export const JudgePortal: React.FC<Props> = ({ data, onChange }) => {
                     {data.assignments?.length ? 'You have assigned tables below.' : 'Select a project to judge.'}
                 </p>
              </div>
-             <button onClick={() => setActiveJudge(null)} className="text-xs bg-indigo-800 hover:bg-indigo-700 px-3 py-1.5 rounded transition-colors border border-indigo-600">Switch User</button>
+             {userRole !== 'JUDGE' && (
+                <button onClick={() => setActiveJudge(null)} className="text-xs bg-indigo-800 hover:bg-indigo-700 px-3 py-1.5 rounded transition-colors border border-indigo-600">Switch User</button>
+             )}
          </div>
          <div className="relative max-w-md mx-auto">
              <Search className="absolute left-3 top-3 text-gray-400" size={18} />

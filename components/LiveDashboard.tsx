@@ -70,6 +70,28 @@ export const LiveDashboard: React.FC<Props> = ({ data, onChange }) => {
       });
   };
 
+  const confirmCheating = (report: JudgeReport) => {
+      if (!onChange) return;
+      
+      // Mark project as cheating
+      const newProjects = data.projects.map(p => 
+          p.id === report.projectId ? { ...p, cheating: true } : p
+      );
+      
+      // Mark report as verified
+      const newReports = data.reports.map(r => 
+          r.projectId === report.projectId && r.status === 'pending'
+          ? { ...r, status: 'verified' as const } 
+          : r
+      );
+
+      onChange({
+          ...data,
+          projects: newProjects,
+          reports: newReports
+      });
+  };
+
   const dismissReport = (report: JudgeReport) => {
       if (!onChange) return;
       const newReports = data.reports.map(r => 
@@ -121,8 +143,12 @@ export const LiveDashboard: React.FC<Props> = ({ data, onChange }) => {
                                   <div className="font-bold text-gray-800 flex items-center gap-2">
                                       {report.type === 'no-show' ? (
                                           <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded text-xs font-bold uppercase">No Show?</span>
+                                      ) : report.type === 'cheating' ? (
+                                          <span className="bg-orange-100 text-orange-800 px-2 py-0.5 rounded text-xs font-bold uppercase flex items-center gap-1">
+                                              <AlertTriangle size={12} /> Cheating?
+                                          </span>
                                       ) : (
-                                          <span className="bg-orange-100 text-orange-800 px-2 py-0.5 rounded text-xs font-bold uppercase">Busy?</span>
+                                          <span className="bg-gray-100 text-gray-800 px-2 py-0.5 rounded text-xs font-bold uppercase">Busy?</span>
                                       )}
                                       Table {project?.table}: {project?.name}
                                   </div>
@@ -137,6 +163,14 @@ export const LiveDashboard: React.FC<Props> = ({ data, onChange }) => {
                                         className="bg-red-600 text-white px-3 py-1.5 rounded text-sm font-bold hover:bg-red-700 flex items-center gap-1"
                                       >
                                           <Check size={14} /> Verify No Show
+                                      </button>
+                                  )}
+                                  {report.type === 'cheating' && (
+                                      <button 
+                                        onClick={() => confirmCheating(report)}
+                                        className="bg-orange-600 text-white px-3 py-1.5 rounded text-sm font-bold hover:bg-orange-700 flex items-center gap-1"
+                                      >
+                                          <AlertTriangle size={14} /> Confirm Flag
                                       </button>
                                   )}
                                   <button 
@@ -261,6 +295,7 @@ export const LiveDashboard: React.FC<Props> = ({ data, onChange }) => {
                         };
                         return (
                             <div key={p.id} className={`p-2 rounded border text-center transition-colors cursor-default ${bgColors[status]}`} title={`${p.name} (Table ${p.table})`}>
+                                {p.cheating && <div className="absolute top-0 right-0 -mt-1 -mr-1"><AlertTriangle size={10} className="text-orange-500 fill-orange-100" /></div>}
                                 <div className="text-xs font-bold">T-{p.table}</div>
                             </div>
                         );
@@ -285,6 +320,7 @@ export const LiveDashboard: React.FC<Props> = ({ data, onChange }) => {
                           <div key={p.id} className="flex hover:bg-gray-50 transition-colors">
                               {/* Project Row Header */}
                               <div className="w-48 p-2 border-r border-b text-xs flex items-center gap-2 sticky left-0 bg-white z-10">
+                                 {p.cheating && <AlertTriangle size={12} className="text-orange-500 shrink-0" />}
                                  <span className="font-mono font-bold text-gray-500 w-8">{p.table}</span>
                                  <span className="truncate w-32" title={p.name}>{p.name}</span>
                               </div>

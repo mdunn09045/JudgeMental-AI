@@ -616,7 +616,7 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
                 </tr>
               ) : (
                   data.projects.map(p => (
-                    <tr key={p.id} className={`border-b hover:bg-gray-50 ${p.noShow ? 'bg-gray-100 text-gray-400' : ''}`}>
+                    <tr key={p.id} className={`border-b hover:bg-gray-50 ${p.noShow ? 'bg-gray-100 text-gray-400' : p.cheating ? 'bg-red-50 border-red-200' : ''}`}>
                       <td className="px-4 py-3">
                         <input 
                             type="checkbox" 
@@ -625,9 +625,12 @@ export const ProjectManager: React.FC<Props> = ({ data, onChange }) => {
                             className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300"
                         />
                       </td>
-                      <td className={`px-4 py-3 font-mono font-bold ${p.noShow ? 'text-gray-400' : 'text-indigo-600'}`}>{p.table}</td>
+                      <td className={`px-4 py-3 font-mono font-bold ${p.noShow ? 'text-gray-400' : p.cheating ? 'text-red-600' : 'text-indigo-600'}`}>{p.table}</td>
                       <td className="px-4 py-3">
-                          <div className={`font-medium ${p.noShow ? 'line-through' : ''}`}>{p.name}</div>
+                          <div className={`font-medium flex items-center gap-2 ${p.noShow ? 'line-through' : ''}`}>
+                              {p.name}
+                              {p.cheating && <span className="bg-red-600 text-white text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">Flagged</span>}
+                          </div>
                           {p.submitterEmail && (
                               <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
                                   <Mail size={10} />

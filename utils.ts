@@ -116,7 +116,7 @@ export const runStressTest = (data: HackathonData): StressTestResult => {
   roles.forEach((orgRoles, phone) => {
     if (orgRoles.length > 1) {
       const orgName = data.organizers.find(o => o.phone === phone)?.name || "Unknown";
-      errors.push(`(L) Violation: Organizer ${orgName} (${phone}) is assigned to multiple roles: ${orgRoles.join(', ')}. Assign additional organizers.`);
+      errors.push(`(L) Violation: Organizer ${orgName} (Phone: ${phone}) is assigned to multiple roles: ${orgRoles.join(', ')}. Assign additional organizers.`);
     }
   });
 

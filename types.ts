@@ -1,11 +1,14 @@
 
 export enum OrganizerRoleType {
+  GENERAL = "Organizer", // Generic role
   DEVPOST = "Devpost Help",
   CLEARING = "Clearing Tables",
   TABLE_ASSIGNMENT = "Assigning Table Numbers / No Shows",
   ORIENTATION = "Judging Orientation / Help Desk",
   SLIDES = "Closing Slides Creator"
 }
+
+export type UserRole = 'MLH' | 'ADMIN' | 'JUDGE' | 'HACKER';
 
 export interface Organizer {
   name: string;
@@ -36,6 +39,7 @@ export interface Project {
   categories: string[]; // List of tracks or prizes
   description?: string;
   noShow?: boolean;
+  cheating?: boolean;
   teamMembers: string[];
   submitterEmail?: string;
 }
@@ -56,7 +60,7 @@ export interface Assignment {
   status: 'pending' | 'completed';
 }
 
-export type ReportType = 'no-show' | 'busy';
+export type ReportType = 'no-show' | 'busy' | 'cheating';
 
 export interface JudgeReport {
   id: string;
@@ -68,6 +72,7 @@ export interface JudgeReport {
 }
 
 export interface HackathonData {
+  id: string; // Unique Event ID
   eventName: string;
   estimatedCheckIns: number;
   // Timestamps are stored as ISO strings
@@ -138,15 +143,16 @@ const DEFAULT_JUDGES: Judge[] = Array.from({ length: 15 }, (_, i) => ({
   phone: '1234567890',
 }));
 
-// Pre-populate organizers with one entry per role
+// Pre-populate organizers with one entry per role, default name = role name, phone = 1234567890
 const DEFAULT_ORGANIZERS: Organizer[] = Object.values(OrganizerRoleType).map(role => ({
-  name: '',
-  phone: '',
+  name: role,
+  phone: '1234567890',
   email: '',
   role: role
 }));
 
 export const INITIAL_DATA: HackathonData = {
+  id: "default-event",
   eventName: "",
   estimatedCheckIns: 0,
   softDeadline: "",

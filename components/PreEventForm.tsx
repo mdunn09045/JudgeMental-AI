@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { HackathonData, Organizer, OrganizerRoleType, Judge, DEFAULT_CRITERIA, Criterion } from '../types';
-import { Plus, Trash2, HelpCircle, AlertTriangle, Edit2, X, Save, Download, Upload, Gavel, Tag, Image as ImageIcon } from 'lucide-react';
+import { Plus, Trash2, HelpCircle, AlertTriangle, Edit2, X, Save, Download, Upload, Gavel, Tag, Image as ImageIcon, Key } from 'lucide-react';
 
 interface Props {
   data: HackathonData;
@@ -109,7 +109,7 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
   };
 
   const addEmptyOrganizer = () => {
-     updateField('organizers', [...data.organizers, { name: '', phone: '', email: '', role: OrganizerRoleType.DEVPOST }]);
+     updateField('organizers', [...data.organizers, { name: '', phone: '', email: '', role: OrganizerRoleType.GENERAL }]);
   };
 
   const removeOrganizer = (index: number) => {
@@ -423,6 +423,12 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
       {/* 4. Judges */}
       <section className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
         <h2 className="text-xl font-bold mb-4 text-indigo-700">4. Judges List</h2>
+        <div className="bg-blue-50 border border-blue-100 p-3 rounded mb-4 flex gap-2 items-start">
+            <Key size={18} className="text-blue-600 mt-0.5 shrink-0" />
+            <p className="text-sm text-blue-800">
+                <strong>Login Credentials:</strong> Judges will use their <span className="font-mono bg-blue-100 px-1 rounded">Name</span> and <span className="font-mono bg-blue-100 px-1 rounded">Phone Number</span> to log in. In the Login Portal, the Phone Number field is labeled "Password".
+            </p>
+        </div>
         <p className="text-sm text-gray-500 mb-4">Total Judges: {data.judges.length} (Est. effective: {Math.ceil(data.judges.length * 0.8)})</p>
         
         <div className="flex gap-2 mb-4 flex-col sm:flex-row">
@@ -433,7 +439,7 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
             onChange={e => setNewJudge({...newJudge, name: e.target.value})}
           />
           <input 
-            placeholder="Phone" 
+            placeholder="Phone (Login Password)" 
             className="border p-2 rounded flex-1"
             value={newJudge.phone || ''}
             onChange={e => setNewJudge({...newJudge, phone: e.target.value})}
@@ -463,7 +469,7 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
         <ul className="space-y-2 max-h-60 overflow-y-auto">
           {data.judges.map(judge => (
             <li key={judge.id} className={`flex justify-between items-center bg-gray-50 p-2 rounded text-sm ${editingJudgeId === judge.id ? 'border border-indigo-500 bg-indigo-50' : ''}`}>
-              <span>{judge.name} - {judge.phone}</span>
+              <span>{judge.name} <span className="text-gray-400 text-xs">(Phone: {judge.phone})</span></span>
               <div className="flex gap-2">
                 <button onClick={() => startEditJudge(judge)} className="text-blue-500 hover:text-blue-700">
                     <Edit2 size={16}/>
@@ -481,7 +487,11 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
       <section className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
         <h2 className="text-xl font-bold mb-4 text-indigo-700">5. Organizers & Roles</h2>
         <div className="mb-4 space-y-2 bg-blue-50 p-4 rounded text-sm text-blue-800">
-          <p>Assign distinct organizers to these critical roles. One organizer cannot hold multiple roles.</p>
+            <div className="flex gap-2 items-start mb-2">
+                <Key size={18} className="text-blue-600 mt-0.5 shrink-0" />
+                <p><strong>Login Credentials:</strong> Organizers log in using their <span className="font-mono bg-blue-100 px-1 rounded">Name</span> and <span className="font-mono bg-blue-100 px-1 rounded">Phone Number</span>. In the Login Portal, the Phone field is labeled "Password".</p>
+            </div>
+            <p>Assign distinct organizers to these critical roles. One organizer cannot hold multiple roles.</p>
         </div>
         
         <div className="space-y-3">
@@ -510,7 +520,7 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
                     />
                  </div>
                  <div className="flex flex-col">
-                    <label className="text-xs font-semibold text-gray-500 mb-0.5">Phone</label>
+                    <label className="text-xs font-semibold text-gray-500 mb-0.5">Phone (Login Password)</label>
                     <input 
                         className="border p-1.5 rounded text-sm" 
                         value={org.phone} 
