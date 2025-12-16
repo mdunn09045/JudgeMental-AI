@@ -388,6 +388,7 @@ export const PreEventForm: React.FC<Props> = ({ data, onChange, onRunTest }) => 
             <div className="border-t pt-4">
                  <label className="block text-sm font-bold text-gray-700 mb-2">
                     Venue Maps / Table Layouts
+                    <Tooltip text="Hint: Make sure that you're labeling the locations of each table number as opposed to a range of numbers in an area of your sheet." />
                     <span className="text-xs font-normal text-gray-500 ml-2">(Displayed in Directory for Hackers)</span>
                  </label>
                  <div className="flex gap-4 items-start flex-col sm:flex-row">
